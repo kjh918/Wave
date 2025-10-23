@@ -83,49 +83,6 @@ class Workflow:
 
         return samples
 
-    # --------------------------
-    # 실행(또는 드라이런)
-    # --------------------------
-    def run(self, run: bool = False):
-        samples = self.discover_samples()
-        if not samples:
-            print("[WAVE] No samples discovered.")
-            return
-
-        print(f"[WAVE] Found {len(samples)} samples:")
-        for sid, info in samples.items():
-            print(f"  ▶ {sid}")
-            for key, val in info.items():
-                print(f"     {key}: {val}")
-
-        for sid, sample_info in samples.items():
-            for task_name, params in self.tasks.items():
-                cmd = self._build_task_cmd(task_name, sid, sample_info, params)
-                print(f"\n[{sid}] {task_name} → {cmd}")
-                if run:
-                    sp.call(cmd, shell=True)
-
-    # --------------------------
-    # Task Command 생성 (간단히 예시)
-    # --------------------------
-    def _build_task_cmd(self, task_name: str, sid: str, sample_info: Dict[str, Any], params: Dict[str, Any]):
-        work_dir = self.work_dir / sid / task_name
-        work_dir.mkdir(parents=True, exist_ok=True)
-
-        # 가장 기본적으로 read_info 변수가 있을 때 처리
-        reads = sample_info.get("read_info", {})
-        inputs = " ".join(str(v) for v in reads.values()) if reads else " ".join(
-            str(v) for v in sample_info.values() if isinstance(v, Path)
-        )
-
-        threads = params.get("threads", 2)
-        cmd = (
-            f"fastqc --threads {threads} "
-            f"--outdir {work_dir} "
-            f"{inputs}"
-        )
-        return cmd
-
 
 # --------------------------
 # 실행 예시
