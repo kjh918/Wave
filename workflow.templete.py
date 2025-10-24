@@ -7,7 +7,8 @@ from typing import Dict, Any, List, Optional
 import pyaml 
 from pathlib import Path 
 
-import Workflow
+sys.path.append('')
+import 
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -23,8 +24,7 @@ def build_argparser() -> argparse.ArgumentParser:
 
 def main():
     
-    workflow = Workflow(args.config)
-
+    workflow = Workflow(Path(args.config))
 
     
 if __name__ == '__main__':

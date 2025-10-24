@@ -59,7 +59,7 @@ class SunGridExecutor(Executor):
         return node in nodeList
 
     def run(self, node: str, cmd: str, threads: int = 1, memory: int | None = None,
-            job_id: str | None = None, random_jobid: bool = True) -> str:
+            job_id: str | None = None, random_jobid: bool = False) -> str:
         """SGE qsub 제출"""
         job_id = (
             "".join(random.choice(string.ascii_letters) for _ in range(10))

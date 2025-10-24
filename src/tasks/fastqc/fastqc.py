@@ -2,10 +2,17 @@
 from __future__ import annotations
 from typing import Iterable, Dict, Any, List
 from pathlib import Path
-from tasks.task import Task, TaskRegistry
+
+import sys
+import os 
+sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+print(__file__)
+from task_registry import TaskRegistry
+from task import Task
 from ._func import build_fastqc_cmd
 
-@TaskRegistry.register
+# @TaskRegistry.register
 class FastQCTask(Task):
     TYPE = "fastqc"
     INPUTS = {

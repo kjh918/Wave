@@ -5,6 +5,7 @@ import subprocess as sp
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import yaml
+import pandas as pd 
 
 
 class Workflow:
@@ -22,38 +23,40 @@ class Workflow:
     # 유틸: 템플릿 파서
     # --------------------------
     def _parse_placeholders(self, tpl: str) -> List[str]:
-        """[name] 패턴 추출"""
-        return re.findall(r"\[([a-zA-Z0-9_]+)\]", tpl)
+        """{name} 패턴 추출"""
+        # {...} 안의 식별자만 뽑기
+        return re.findall(r"\{([a-zA-Z0-9_]+)\}", tpl)
+
 
     def _tpl_to_regex(self, tpl: str, placeholders: List[str]) -> re.Pattern:
-        """플레이스홀더를 정규식 그룹으로 변환"""
+        """플레이스홀더를 정규식 그룹으로 변환 (예: {sample_id}, {read_info})"""
         esc = re.escape(tpl)
         for ph in placeholders:
             if ph == "sample_id":
-                esc = esc.replace(re.escape(f"[{ph}]"), r"(?P<sample_id>[^/]+)")
+                esc = esc.replace(re.escape(f"{{{ph}}}"), r"(?P<sample_id>[^/]+)")
             else:
-                esc = esc.replace(re.escape(f"[{ph}]"), rf"(?P<{ph}>[^/]+)")
+                esc = esc.replace(re.escape(f"{{{ph}}}"), rf"(?P<{ph}>[^/]+)")
         return re.compile(rf"^{esc}$")
 
+
     def _tpl_to_glob(self, tpl: str, placeholders: List[str]) -> str:
+        """{name} → * 로 치환해 glob 패턴 생성"""
         pat = tpl
         for ph in placeholders:
-            pat = pat.replace(f"[{ph}]", "*")
+            pat = pat.replace(f"{{{ph}}}", "*")
         return pat
 
-    # --------------------------
-    # 샘플 탐색
-    # --------------------------
+
     def discover_samples(self) -> Dict[str, Dict[str, Any]]:
         tpl = self.input_tpl
         placeholders = self._parse_placeholders(tpl)
         if "sample_id" not in placeholders:
-            raise ValueError("input_path template must include [sample_id]")
+            raise ValueError("input_path template must include {sample_id}")
 
         rx = self._tpl_to_regex(tpl, placeholders)
         glob_pat = self._tpl_to_glob(tpl, placeholders)
 
-        # 절대경로 보정 후 스캔
+        # 절대경로 기준 glob (tpl이 절대경로라고 가정)
         files = [Path(p) for p in Path("/").glob(glob_pat.lstrip("/"))]
         if not files:
             print(f"[WAVE] No files matched {glob_pat}")
@@ -68,22 +71,19 @@ class Workflow:
             sid = g.pop("sample_id")
 
             samples.setdefault(sid, {})
-            # 남은 placeholder 들을 계층적으로 정리
             if len(g) == 1:
-                # 단일 추가 변수
+                # 단일 추가 변수: {var} -> { value: Path }
                 key, val = next(iter(g.items()))
                 samples[sid].setdefault(key, {})
                 samples[sid][key][val] = f
             elif len(g) > 1:
-                # 여러 변수가 있을 때 복합 key
+                # 복합 키(여러 변수 조합)
                 key = "_".join([f"{k}:{v}" for k, v in g.items()])
                 samples[sid][key] = f
             else:
                 samples[sid]["file"] = f
 
         return samples
-
-
 # --------------------------
 # 실행 예시
 # --------------------------
