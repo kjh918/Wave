@@ -1,14 +1,17 @@
 from __future__ import annotations
 from typing import Iterable, Dict, Any, Optional, List
 from pathlib import Path
+import sys
+import os 
 
-from tasks.task import Task
-from tasks.task_registry import register_task
-from ._func import build_jellyfish_count_cmd
+sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from task_registry import TaskRegistry
+from task import Task
+from ._func import build_jellyfish_count_cmd, build_jellyfish_histo_cmd, build_draw_histo_plot_cmd
 
-
-@register_task("jellyfish_count")
-class JellyfishCountTask(Task):
+# @register_task("jellyfish_count")
+class JellyfishTask(Task):
     """
     jellyfish count Task
 
@@ -43,7 +46,8 @@ class JellyfishCountTask(Task):
     }
 
     DEFAULTS = {
-        "k_mer": 21,
+        "jellyfish": '/storage/home/jhkim/Apps/jellyfish-2.3.1/bin/jellyfish',
+        "k_mer": 19,
         "size": "100M",
         "threads": 8,
         "canonical": True,
@@ -61,10 +65,11 @@ class JellyfishCountTask(Task):
         # inputs가 주어졌으면 그대로 사용, 아니면 RawFastqDir/SeqID로 자동 탐색
         inputs: Optional[List[str]] = p.get("inputs")
 
-        return build_jellyfish_count_cmd(
+        return build_draw_histo_plot_cmd(
             inputs=inputs,
             RawFastqDir=p.get("RawFastqDir"),
             SeqID=seqid if not inputs else None,  # inputs가 있으면 자동탐색 미사용
+            jellyfish=str(p.get("jellyfish", self.DEFAULTS['jellyfish'])),
             k_mer=int(p.get("k_mer", self.DEFAULTS["k_mer"])),
             size=str(p.get("size", self.DEFAULTS["size"])),
             threads=int(p.get("threads", self.DEFAULTS["threads"])),
@@ -74,3 +79,4 @@ class JellyfishCountTask(Task):
             image=p.get("image"),
             binds=p.get("binds"),
         )
+

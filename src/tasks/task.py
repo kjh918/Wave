@@ -42,8 +42,9 @@ class Task(abc.ABC):
     DEFAULTS: Dict[str, Any] = {}
     OPTIONAL: set[str] | list[str] = set()
 
-    def __init__(self, name: str, params: Dict[str, Any], workdir: Path):
+    def __init__(self, name: str, version: str, params: Dict[str, Any], workdir: Path):
         # 최소 보관만; 검증/템플릿 전개는 다음 단계에서 추가
         self.name = name
+        self.version = version
         self.params = {**self.DEFAULTS, **(params or {})}
         self.workdir = Path(workdir)
