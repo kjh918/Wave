@@ -30,21 +30,21 @@ class TaskRegistry:
 # ---- Base Task ----
 class Task(abc.ABC):
     """
-    각 Task는 아래 스키마를 갖고, `to_sh()` 로 실행할 쉘 라인을 돌려줍니다.
-    - INPUTS:   필수/옵션 인풋 키들(설명/템플릿 허용)
-    - OUTPUTS:  산출물 경로나 템플릿
-    - DEFAULTS: 기본 파라미터 값
-    - OPTIONAL: 옵션 파라미터 키 집합
+    모든 Task 클래스의 기본 부모.
+    각 Runner(FastQCRunner, FastPRunner 등)가 상속받아서 사용.
     """
-    TYPE: str  # subclass 필수 지정
-    INPUTS: Dict[str, Any] = {}
-    OUTPUTS: Dict[str, Any] = {}
-    DEFAULTS: Dict[str, Any] = {}
-    OPTIONAL: set[str] | list[str] = set()
 
-    def __init__(self, name: str, version: str, params: Dict[str, Any], workdir: Path):
-        # 최소 보관만; 검증/템플릿 전개는 다음 단계에서 추가
-        self.name = name
-        self.version = version
-        self.params = {**self.DEFAULTS, **(params or {})}
+    def __init__(
+        self,
+        workdir: str,
+        inputs: Optional[Dict[str, Any]] = None,
+        outputs: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ):
         self.workdir = Path(workdir)
+        self.inputs = inputs or {}
+        self.outputs = outputs or {}
+        self.params = params or {}
+
+        # Task 실행 전 출력 디렉토리 보장
+        self.workdir.mkdir(parents=True, exist_ok=True)

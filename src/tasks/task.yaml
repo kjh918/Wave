@@ -1,5 +1,0 @@
-# tasks_map.yaml
-overrides:
-  fastqc: v1          # 시스템 전체 기본은 v1로 고정
-aliases:
-  fq-qc: fastqc:v2    # 사용자 별칭 → 특정 구현
