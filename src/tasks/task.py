@@ -1,9 +1,9 @@
+# src/tasks/task.py
 from __future__ import annotations
 import abc
+from typing import Dict, Any
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Callable
 
-# ---- Registry ----
 class TaskRegistry:
     _reg: dict[str, type] = {}
 
@@ -12,8 +12,6 @@ class TaskRegistry:
         name = getattr(t, "TYPE", None)
         if not name:
             raise ValueError("Task class must define TYPE")
-        if name in cls._reg:
-            raise ValueError(f"Task TYPE already registered: {name}")
         cls._reg[name] = t
         return t
 
@@ -23,28 +21,21 @@ class TaskRegistry:
             raise KeyError(f"Unknown task TYPE: {name}")
         return cls._reg[name]
 
-    @classmethod
-    def all(cls) -> Dict[str, type]:
-        return dict(cls._reg)
-
-# ---- Base Task ----
 class Task(abc.ABC):
-    """
-    모든 Task 클래스의 기본 부모.
-    각 Runner(FastQCRunner, FastPRunner 등)가 상속받아서 사용.
-    """
+    TYPE: str
+    DEFAULTS: Dict[str, Any] = {}
 
-    def __init__(
-        self,
-        workdir: str,
-        inputs: Optional[Dict[str, Any]] = None,
-        outputs: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, name: str, workdir: Path,
+                 inputs: Dict[str, Any] = None,
+                 outputs: Dict[str, Any] = None,
+                 params: Dict[str, Any] = None):
+        self.name = name
         self.workdir = Path(workdir)
         self.inputs = inputs or {}
         self.outputs = outputs or {}
-        self.params = params or {}
-
-        # Task 실행 전 출력 디렉토리 보장
+        self.params = {**(self.DEFAULTS or {}), **(params or {})}
         self.workdir.mkdir(parents=True, exist_ok=True)
+
+    @abc.abstractmethod
+    def to_sh(self):
+        ...

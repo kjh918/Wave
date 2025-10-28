@@ -1,99 +1,90 @@
-# tasks/fastp/fastp.py
+# tasks/fastp/__main__.py
 from __future__ import annotations
-from typing import Iterable, Dict, Any, Optional
+import argparse
 from pathlib import Path
+import subprocess
 
-import sys
-import os 
-sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from task_registry import TaskRegistry
-from task import Task
 from ._func import build_fastp_cmd
 
-TASK_CLASS = 'FastpTask'
 
-# @register_task("fastp")
-class FastpTask(Task):
-    """
-    Paired-end fastp 실행 Task
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="python -m tasks.fastp",
+        description="fastp task CLI (generate and/or run a single fastp command)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    # 필수
+    p.add_argument("--rawdir", dest="RawFastqDir", required=True, help="Input FASTQ directory")
+    p.add_argument("--seqid", dest="SeqID", required=True, help="Sample ID (expects <SeqID>_R1/2.fastq.gz)")
+    p.add_argument("--outdir", dest="TrimFastqDir", required=True, help="Output directory for trimmed FASTQs")
 
-    필수/옵션 파라미터 정의:
-      - RawFastqDir:   입력 FASTQ 디렉토리 (필수)
-      - SeqID:         샘플 ID (필수; <SeqID>_R1/2.fastq.gz 형태를 탐색)
-      - threads:       스레드 수 (기본 4)
-      - PicoplexGold:  Picoplex Gold 프로토콜 여부(Yes/No 또는 bool). Yes면 --trim_front1/2 14 적용
-      - trim_front1/2: PicoplexGold=True일 때 기본 14. 직접 지정 가능
-      - length_required / average_qual / qualified_quality_phred: 품질/길이 필터
-      - TrimFastqDir:  트리밍 FASTQ 출력 디렉토리 (옵션; 없으면 workdir/<SeqID>_fastp)
-      - image:         Singularity 이미지 경로 (옵션; 없으면 로컬 fastp 사용)
-      - binds:         Singularity 바인드 리스트 또는 콤마 문자열 (옵션)
-    """
+    # 품질/스레드
+    p.add_argument("--threads", type=int, default=4)
+    p.add_argument("--length-required", dest="length_required", type=int, default=100)
+    p.add_argument("--average-qual", dest="average_qual", type=int, default=10)
+    p.add_argument("--qualified-quality-phred", dest="qualified_quality_phred", type=int, default=15)
 
-    TYPE = "fastp"
+    # PicoplexGold 옵션
+    p.add_argument("--picoplex-gold", dest="picoplex_gold", action="store_true",
+                   help="Enable Picoplex Gold trimming (defaults trim_front1/2=14 unless overridden)")
+    p.add_argument("--trim-front1", dest="trim_front1", type=int, default=14)
+    p.add_argument("--trim-front2", dest="trim_front2", type=int, default=14)
 
-    INPUTS = {
-        "RawFastqDir": "Input FASTQ dir",
-        "SeqID": "Sample ID",
-        "threads": "int",
-        "PicoplexGold": "bool",
-        "trim_front1": "int (optional; default 14 when PicoplexGold)",
-        "trim_front2": "int (optional; default 14 when PicoplexGold)",
-        "length_required": "int",
-        "average_qual": "int",
-        "qualified_quality_phred": "int",
-        "TrimFastqDir": "Output dir for trimmed FASTQs (optional)",
-        "image": "(optional) Singularity image path",
-        "binds": "(optional) bind list or comma-string",
-    }
+    # 컨테이너
+    p.add_argument("--image", default="/storage/images/fastp-0.23.4.sif",
+                   help="Singularity image path; set with --no-image to use local fastp")
+    p.add_argument("--no-image", dest="no_image", action="store_true",
+                   help="Use local fastp binary (ignore --image)")
+    p.add_argument("--bind", dest="binds", action="append",
+                   help="Bind path(s) for singularity, repeatable (e.g., --bind /storage --bind /data)")
 
-    DEFAULTS = {
-        "threads": 4,
-        "PicoplexGold": False,
-        "trim_front1": 14,
-        "trim_front2": 14,
-        "length_required": 100,
-        "average_qual": 10,
-        "qualified_quality_phred": 15,
-    }
+    # 동작
+    p.add_argument("--emit", help="Write a .sh script to this path")
+    p.add_argument("--run", action="store_true", help="Run immediately after generation")
+    return p
 
-    OPTIONAL = {
-        "TrimFastqDir",
-        "image",
-        "binds",
-        "trim_front1",
-        "trim_front2",
-    }
 
-    def to_sh(self) -> Iterable[str]:
-        p: Dict[str, Any] = self.params
-        seqid = str(p["SeqID"])
+def main():
+    ap = build_parser()
+    a = ap.parse_args()
 
-        # 출력 디렉토리 자동 설정
-        trim_dir: str = p.get("TrimFastqDir") or str(Path(self.workdir) / f"{seqid}_fastp")
-        Path(trim_dir).mkdir(parents=True, exist_ok=True)
-        
-        # PicoplexGold 여부 정규화
-        picoplex_gold: bool = p.get("PicoplexGold")
+    # 출력 디렉토리 준비
+    outdir = Path(a.TrimFastqDir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
-        # trim_front는 PicoplexGold일 때만 강제 적용(사용자가 직접 값 넣으면 그 값을 우선)
-        tf1_default = int(self.DEFAULTS["trim_front1"])
-        tf2_default = int(self.DEFAULTS["trim_front2"])
-        trim_front1 = int(p.get("trim_front1", tf1_default))
-        trim_front2 = int(p.get("trim_front2", tf2_default))
+    image = None if a.no_image else a.image
+    binds = a.binds  # None | list[str]
 
-        return build_fastp_cmd(
-            RawFastqDir=str(p["RawFastqDir"]),
-            SeqID=seqid,
-            TrimFastqDir=trim_dir,
-            threads=int(p.get("threads", self.DEFAULTS["threads"])),
-            picoplex_gold=picoplex_gold,
-            trim_front1=trim_front1,
-            trim_front2=trim_front2,
-            length_required=int(p.get("length_required", self.DEFAULTS["length_required"])),
-            average_qual=int(p.get("average_qual", self.DEFAULTS["average_qual"])),
-            qualified_quality_phred=int(p.get("qualified_quality_phred", self.DEFAULTS["qualified_quality_phred"])),
-            image=p.get("image"),
-            binds=p.get("binds"),
-        )
+    cmds = build_fastp_cmd(
+        RawFastqDir=a.RawFastqDir,
+        SeqID=a.SeqID,
+        TrimFastqDir=a.TrimFastqDir,
+        threads=a.threads,
+        picoplex_gold=a.picoplex_gold,
+        trim_front1=a.trim_front1,
+        trim_front2=a.trim_front2,
+        length_required=a.length_required,
+        average_qual=a.average_qual,
+        qualified_quality_phred=a.qualified_quality_phred,
+        image=image,
+        binds=binds,
+    )
+
+    line = cmds[0]  # build_fastp_cmd returns a list with single command string
+
+    if a.emit:
+        out = Path(a.emit)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("#!/usr/bin/env bash\nset -euo pipefail\n" + line + "\n")
+        out.chmod(0o755)
+        print(f"[fastp] wrote script: {out}")
+
+    if a.run:
+        print(f"[fastp] running: {line}")
+        subprocess.run(["bash", "-lc", line], check=True)
+    else:
+        print(line)
+
+
+if __name__ == "__main__":
+    main()

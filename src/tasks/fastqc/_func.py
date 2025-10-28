@@ -1,52 +1,69 @@
+# src/tasks/fastqc/_func.py
 from __future__ import annotations
-from pathlib import Path
-from typing import Iterable, Optional, List, Union
-import shlex
+from typing import List, Optional, Sequence
 
 
 def build_fastqc_cmd(
         *,
-        inputs: List[str],
+        inputs: Sequence[str],
         out_dir: str,
         threads: int = 2,
         extract: bool = True,
-        image: Optional[str] = "/storage/images/fastqc-0.12.1.sif",
-        binds: Optional[Union[List[str], str]] = ("/storage,/data"),
+        image: Optional[str] = None,
+        binds: Optional[Sequence[str]] = None,
         fastqc_bin: str = "fastqc",
         singularity_bin: str = "singularity",
-    ) -> Iterable[str]:
+    ) -> List[str]:
     """
-    FastQC 실행 커맨드 생성:
-      - inputs: R1/R2 경로 리스트
-      - out_dir: 결과 디렉토리
-      - image가 있으면 singularity exec, 없으면 로컬 바이너리 사용
+    Build full fastqc command (supports singularity or local execution).
+
+    Parameters
+    ----------
+    inputs : list[str]
+        One or two FASTQ files.
+    out_dir : str
+        Output directory path.
+    threads : int
+        Number of threads.
+    extract : bool
+        Whether to use --extract option.
+    image : str, optional
+        Singularity image path. If None, run locally.
+    binds : list[str], optional
+        List of paths to bind when using singularity.
+    fastqc_bin : str
+        FastQC binary name (default: 'fastqc')
+    singularity_bin : str
+        Singularity binary name (default: 'singularity')
+
+    Returns
+    -------
+    list[str]
+        Single command line string ready to write into .sh
     """
-    Path(out_dir).mkdir(parents=True, exist_ok=True)
-    if not inputs:
-        raise ValueError("build_fastqc_cmd: inputs is empty")
+    if not inputs or len(inputs) == 0:
+        raise ValueError("[build_fastqc_cmd] no input FASTQs provided")
 
-    files = " ".join(shlex.quote(x) for x in inputs)
-    opt_extract = "--extract " if extract else ""
-    base = (
-        f"{shlex.quote(fastqc_bin)} "
-        f"{opt_extract}"
-        f"--threads {threads} "
-        f"--outdir {shlex.quote(out_dir)} "
-        f"{files}"
-    )
+    # 기본 FastQC argv
+    cmd: List[str] = [fastqc_bin]
+    if extract:
+        cmd.append("--extract")
+    cmd += ["--threads", str(int(threads)), "--outdir", out_dir]
+    cmd += list(map(str, inputs))
 
+    # --- Singularity 사용 여부 ---
     if image:
-        if isinstance(binds, list):
-            bind_opt = "-B " + ",".join(binds) if binds else ""
-        elif isinstance(binds, str):
-            bind_opt = f"-B {binds}" if binds else ""
-        else:
-            bind_opt = ""
-        cmd = f"{shlex.quote(singularity_bin)} exec {bind_opt} {shlex.quote(image)} {base}"
-    else:
-        cmd = base
+        bind_flags: List[str] = []
+        if binds:
+            for b in binds:
+                bind_flags += ["-B", b]
+        cmd = [
+            singularity_bin,
+            "exec",
+            *bind_flags,
+            image,
+            *cmd,  # fastqc 부분 그대로 삽입
+        ]
 
-    return [
-        f"mkdir -p {shlex.quote(out_dir)}",
-        cmd,
-    ]
+    # 최종 문자열
+    return [" ".join(cmd)]
