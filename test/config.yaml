@@ -1,0 +1,54 @@
+SETTING:
+  User: jhkim
+  Node: all.q@ngsnode1
+
+WORK_PARAMETERS:
+  input_path: /storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R{read}.fastq.gz
+  work_dir_path: /storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Results/Test
+  
+TASK_LIST:
+  - Rawdata_FastQC:
+      TOOL: fastqc
+      WORK_DIR: "{work_dir_path}/{sample_id}/00_Rawdata_FastQC"
+      INPUT:
+        read1: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R1.fastq.gz"
+        reqd2: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R2.fastq.gz"
+      OUTPUT:
+        read1: "{WORK_DIR}/{sample_id}_R1_fastqc/fastqc_data.txt"
+        reqd2: "{WORK_DIR}/{sample_id}_R2_fastqc/fastqc_data.txt"
+      PARAMS:
+        threads: 4
+        extract: true
+  
+  - Trimdata_FastP: 
+      TOOL: fastp
+      WORK_DIR: "{work_dir_path}/{sample_id}/01_Trimdata_FastP"
+      INPUT:
+        read1: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R1.fastq.gz"
+        read2: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R2.fastq.gz"
+      OUTPUT:
+        read1: "{WORK_DIR}/{sample_id}_R1.trimed.fastq.gz"
+        read2: "{WORK_DIR}/{sample_id}_R2.trimed.fastq.gz"
+        json: "{WORK_DIR}/{sample_id}.fastp.json"
+        html: "{WORK_DIR}/{sample_id}.fastp.html"
+      PARAMS: 
+        threads: 2
+        PicoplexGold: False
+        trim_front1: 0
+        trim_front2: 0
+        length_required: 100
+        average_qual: 10
+        qualified_quality_phred: 15
+      
+  - Trimdata_FastQC:
+      TOOL: fastqc
+      WORK_DIR: "{work_dir_path}/{sample_id}/02_Trimdata_FastQC"
+      INPUT:
+        read1: "{work_dir_path}/{sample_id}/01_Trimdata_FastP/{sample_id}_R1.trimed.fastq.gz"
+        reqd2: "{work_dir_path}/{sample_id}/01_Trimdata_FastP/{sample_id}_R2.trimed.fastq.gz"
+      OUTPUT:
+        read1: "{WORK_DIR}/{sample_id}_R1.trimed_fastqc/fastqc_data.txt"
+        reqd2: "{WORK_DIR}/{sample_id}_R2.trimed_fastqc/fastqc_data.txt"
+      PARAMS:
+        threads: 4
+        extract: true

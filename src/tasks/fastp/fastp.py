@@ -28,8 +28,6 @@ class FastpTask(Task):
     TYPE = "fastp"
 
     INPUTS = {
-        "RawFastqDir": "Input FASTQ dir",
-        "SeqID": "Sample ID",
         "threads": "int",
         "PicoplexGold": "bool",
         "trim_front1": "int (optional; default 14 when PicoplexGold)",
@@ -52,34 +50,9 @@ class FastpTask(Task):
         "qualified_quality_phred": 15,
     }
 
-    OPTIONAL = {
-        "TrimFastqDir",
-        "image",
-        "binds",
-        "trim_front1",
-        "trim_front2",
-    }
-
-    def _normalize_binds(self, binds: Any) -> list[str] | None:
-        if binds is None:
-            return None
-        if isinstance(binds, str):
-            return [x.strip() for x in binds.split(",") if x.strip()]
-        if isinstance(binds, (list, tuple)):
-            return [str(x) for x in binds]
-        return None
-
-    def _join_lines(self, lines: Iterable[str | Sequence[str]]) -> Iterable[str]:
-        """argv 시퀀스/문자열 혼재를 안전하게 문자열 라인으로 통일"""
-        for ln in lines:
-            if isinstance(ln, (list, tuple)):
-                yield shlex.join([str(t) for t in ln])
-            else:
-                yield str(ln)
-
     def to_sh(self) -> Iterable[str]:
-        p: Dict[str, Any] = self.params
-        seqid = str(p["SeqID"])
+        p: Dict[str, Any] = self.Params
+
 
         # 출력 디렉토리 자동 설정
         trim_dir: str = p.get("TrimFastqDir") or str(Path(self.workdir) / f"{seqid}_fastp")
@@ -113,3 +86,22 @@ class FastpTask(Task):
 
         # 문자열 라인으로 통일하여 반환
         return list(self._join_lines(lines))
+    def to_sh(self) -> List[str]:
+        inputs = [self.inputs.get("read1")]
+        if self.inputs.get("read2"):
+            inputs.append(self.inputs["read2"])
+
+        out_dir = self.WORK_DIR
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+        p = self.PARAMS
+        return build_fastqc_cmd(
+            inputs=inputs,
+            out_dir=out_dir,
+            threads=int(p["threads"]),
+            extract=bool(p["extract"]),
+            image=p.get("image"),
+            binds=p.get("binds"),
+            fastqc_bin=p.get("fastqc_bin", "fastqc"),
+            singularity_bin=p.get("singularity_bin", "singularity"),
+        )

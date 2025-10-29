@@ -19,14 +19,14 @@ class FastQCRunner(Task):
     }
 
     def to_sh(self) -> List[str]:
-        inputs = [self.inputs.get("fastq_r1")]
-        if self.inputs.get("fastq_r2"):
-            inputs.append(self.inputs["fastq_r2"])
+        inputs = [self.inputs.get("read1")]
+        if self.inputs.get("read2"):
+            inputs.append(self.inputs["read2"])
 
-        out_dir = self.outputs.get("dir") or str(self.workdir)
+        out_dir = self.WORK_DIR
         Path(out_dir).mkdir(parents=True, exist_ok=True)
 
-        p = self.params
+        p = self.PARAMS
         return build_fastqc_cmd(
             inputs=inputs,
             out_dir=out_dir,

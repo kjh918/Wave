@@ -20,20 +20,20 @@ def _norm_binds(binds: Optional[Sequence[str] | str]) -> str:
 
 
 def build_fastp_cmd(
-    *,
-    RawFastqDir: str,
-    SeqID: str,
-    TrimFastqDir: str,
-    threads: int = 4,
-    picoplex_gold: bool = False,     # True면 --trim_front1/2 적용
-    trim_front1: int = 14,
-    trim_front2: int = 14,
-    length_required: int = 100,
-    average_qual: int = 10,
-    qualified_quality_phred: int = 15,
-    image: Optional[str] = None,     # None이면 로컬 fastp 사용, 경로 주면 singularity exec
-    binds: Optional[Sequence[str] | str] = None,
-) -> Iterable[str]:
+        *,
+        RawFastqDir: str,
+        SeqID: str,
+        TrimFastqDir: str,
+        threads: int = 4,
+        picoplex_gold: bool = False,     # True면 --trim_front1/2 적용
+        trim_front1: int = 14,
+        trim_front2: int = 14,
+        length_required: int = 100,
+        average_qual: int = 10,
+        qualified_quality_phred: int = 15,
+        image: Optional[str] = None,     # None이면 로컬 fastp 사용, 경로 주면 singularity exec
+        binds: Optional[Sequence[str] | str] = None,
+    ) -> Iterable[str]:
     """
     fastp 실행 커맨드를 문자열 한 줄로 만들어 리스트에 담아 반환합니다.
     상위 레이어에서 그대로 파일에 쓰거나 subprocess로 실행하기 좋습니다.

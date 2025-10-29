@@ -1,13 +1,14 @@
 # flexible_workflow.py
 from __future__ import annotations
-import re, yaml, shlex, subprocess, importlib, pkgutil
+import os, re, yaml, shlex, subprocess, importlib, pkgutil, sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Iterable
 
 # 베이스 Task & 레지스트리
-from src.tasks.task import Task  # type: ignore
-from src.tasks.task import TaskRegistry  # type: ignore
+sys.path.append(os.path.dirname(__file__))
+from src.tasks.task import Task
+from src.tasks.task import TaskRegistry  
 
 
 # --------------------------
@@ -179,63 +180,64 @@ class Workflow:
     # --------------------------
     # 레거시 TASK_LIST 정규화 (요청 스키마 지원)
     # --------------------------
-    def _base_dir_from_input_tpl(self) -> Path:
-        return Path(self.input_tpl).parent
 
+    def _set_params(self, sample_id, task_work_dir, inputs):
+        setted_inputs = {}
+        for key, value in inputs.items():
+            value = str(value)
+            setted_inputs[key] = value.replace('{work_dir_path}', str(self.work_dir)).replace('{sample_id}', sample_id).replace('{WORK_DIR}', str(task_work_dir))
+        print(setted_inputs)
+        return setted_inputs
+    
     def _normalize_tasklist_legacy(self, task_list_raw: Any, sample_id: str) -> List[Dict[str, Any]]:
         """
         TASK_LIST:
           - <name>:
-              tool: <type>
+              TOOL: <type>
+              WORK_DIR: <Path>
               INPUT:  { read1: "...", read2: "..." }
               OUTPUT: { dirname: "..." }
-              params: { ... }
+              PARAMS: { ... }
         → [{name, type, inputs, outputs, params}]
         """
         if not isinstance(task_list_raw, list):
             raise TypeError("TASK_LIST must be a list for legacy form.")
 
-        base_dir = self._base_dir_from_input_tpl()
         norm: List[Dict[str, Any]] = []
-        for item in task_list_raw:
+        for idx, item in enumerate(task_list_raw, 1):
+
+            name, spec = next(iter(item.items()))
+
+            task_dir_name = self.work_dir / Path(f'{sample_id}/{idx:02d}_{name}')
+            
+            ttype = spec.get("TOOL")
+
             if not isinstance(item, dict) or len(item) != 1:
                 raise ValueError(f"Invalid TASK_LIST entry: {item}")
-            name, spec = next(iter(item.items()))
             if not isinstance(spec, dict):
                 raise ValueError(f"Task spec must be a dict: {item}")
-            ttype = spec.get("tool")
             if not ttype:
                 raise ValueError(f"TASK '{name}' missing 'tool'")
-
+            
+            task_work_dir = str(spec.get("WORK_DIR", '') or self.work_dir)
             inp = spec.get("INPUT", {}) or {}
             outp = spec.get("OUTPUT", {}) or {}
-            params = spec.get("params", {}) or {}
-
-            ctx = {"sample_id": sample_id}
-            read1 = _render_value(inp.get("read1"), ctx)
-            read2 = _render_value(inp.get("read2"), ctx)
-            dirname = _render_value(outp.get("dirname"), ctx)
-
-            # 상대경로면 input_path의 디렉토리를 base로 절대화
-            def _abs(p: Optional[str]) -> Optional[str]:
-                if not p:
-                    return None
-                pp = Path(p)
-                return str(pp if pp.is_absolute() else (base_dir / p))
-
-            r1_abs = _abs(read1)
-            r2_abs = _abs(read2)
-
-            # 출력 디렉토리: work_dir/<sample_id>/<dirname> (없으면 Task 기본값 사용)
-            out_dir = str((self.work_dir / sample_id / dirname).resolve()) if dirname else ""
-
+            params = spec.get("PARAMS", {}) or {}
+            task_work_dir = task_work_dir.replace('{work_dir_path}', str(self.work_dir)).replace('{sample_id}', sample_id)
+            
+            inputs = self._set_params(sample_id, task_work_dir, inp)
+            outputs = self._set_params(sample_id, task_work_dir, outp)
+            params = self._set_params(sample_id, task_work_dir, params)
+            
             norm.append({
                 "name": name,
+                "workdir": task_dir_name,
                 "type": ttype,
-                "inputs": {"fastq_r1": r1_abs, "fastq_r2": r2_abs},
-                "outputs": {"dir": out_dir} if out_dir else {},
+                "inputs": inputs,
+                "outputs": outputs,
                 "params": params,
             })
+            
         return norm
 
     # --------------------------
@@ -251,7 +253,8 @@ class Workflow:
         masters: Dict[str, Path] = {}
         for sid, _ in samples.items():
             # 1) 레거시 TASK_LIST 정규화
-            tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", []), sample_id=sid)
+            
+            tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", {}), sample_id=sid)
 
             # 샘플 작업 루트
             sid_root = self.work_dir / sid
@@ -264,8 +267,8 @@ class Workflow:
                 for idx, t in enumerate(tasks_norm, 1):
                     tdir = sid_root / f"{idx:02d}_{t['name']}"
                     tdir.mkdir(parents=True, exist_ok=True)
-
                     # Task 인스턴스 생성
+                    
                     TaskCls = self._resolve_task_class(t["type"])
                     task = _instantiate_task(
                         TaskCls,
