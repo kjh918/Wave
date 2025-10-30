@@ -23,10 +23,10 @@ class FastQCRunner(Task):
         if self.inputs.get("read2"):
             inputs.append(self.inputs["read2"])
 
-        out_dir = self.WORK_DIR
+        out_dir = self.workdir
         Path(out_dir).mkdir(parents=True, exist_ok=True)
 
-        p = self.PARAMS
+        p = self.params
         return build_fastqc_cmd(
             inputs=inputs,
             out_dir=out_dir,

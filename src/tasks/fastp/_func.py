@@ -21,9 +21,14 @@ def _norm_binds(binds: Optional[Sequence[str] | str]) -> str:
 
 def build_fastp_cmd(
         *,
-        RawFastqDir: str,
-        SeqID: str,
-        TrimFastqDir: str,
+        read1: str,
+        read2: str,
+        trim_read1: str,
+        trim_read2: str,
+        fastp_json: str,
+        fastp_html: str,
+        adapter_sequence: str,
+        adapter_sequence_r2: str,
         threads: int = 4,
         picoplex_gold: bool = False,     # True면 --trim_front1/2 적용
         trim_front1: int = 14,
@@ -38,37 +43,19 @@ def build_fastp_cmd(
     fastp 실행 커맨드를 문자열 한 줄로 만들어 리스트에 담아 반환합니다.
     상위 레이어에서 그대로 파일에 쓰거나 subprocess로 실행하기 좋습니다.
     """
-    raw = Path(RawFastqDir)
-    if not raw.exists():
-        raise FileNotFoundError(f"[fastp] RawFastqDir not found: {raw}")
-
-    r1 = raw / f"{SeqID}_R1.fastq.gz"
-    r2 = raw / f"{SeqID}_R2.fastq.gz"
-    if not r1.exists():
-        raise FileNotFoundError(f"[fastp] R1 not found: {r1}")
-    if not r2.exists():
-        raise FileNotFoundError(f"[fastp] R2 not found: {r2}")
-
-    out_dir = Path(TrimFastqDir)
-    # 상위에서 디렉토리를 만들어 주지만, 안전하게 경로만 계산
-    out1 = out_dir / f"{SeqID}.trimmed_R1.fastq.gz"
-    out2 = out_dir / f"{SeqID}.trimmed_R2.fastq.gz"
-    json_out = out_dir / f"{SeqID}.fastp.json"
-    html_out = out_dir / f"{SeqID}.fastp.html"
-
     # 공통 fastp 옵션
     opts: List[str] = [
         "--thread", str(int(threads)),
-        "--in1", shlex.quote(str(r1)),
-        "--in2", shlex.quote(str(r2)),
-        "--out1", shlex.quote(str(out1)),
-        "--out2", shlex.quote(str(out2)),
-        "--json", shlex.quote(str(json_out)),
-        "--html", shlex.quote(str(html_out)),
+        "--in1", shlex.quote(str(read1)),
+        "--in2", shlex.quote(str(read2)),
+        "--out1", shlex.quote(str(trim_read1)),
+        "--out2", shlex.quote(str(trim_read2)),
+        "--json", shlex.quote(str(fastp_json)),
+        "--html", shlex.quote(str(fastp_html)),
         "--trim_poly_g",
         "--detect_adapter_for_pe",
-        "--adapter_sequence", "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA",
-        "--adapter_sequence_r2", "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT",
+        "--adapter_sequence", shlex.quote(str(adapter_sequence)),
+        "--adapter_sequence_r2",shlex.quote(str(adapter_sequence_r2)), 
         "--length_required", str(int(length_required)),
         "--average_qual", str(int(average_qual)),
         "--qualified_quality_phred", str(int(qualified_quality_phred)),

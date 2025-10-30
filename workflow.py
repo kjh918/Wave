@@ -265,10 +265,9 @@ class Workflow:
             with master_sh.open("w") as mf:
                 mf.write("#!/usr/bin/env bash\nset -euo pipefail\n")
                 for idx, t in enumerate(tasks_norm, 1):
-                    tdir = sid_root / f"{idx:02d}_{t['name']}"
+                    tdir = t['workdir']
                     tdir.mkdir(parents=True, exist_ok=True)
                     # Task 인스턴스 생성
-                    
                     TaskCls = self._resolve_task_class(t["type"])
                     task = _instantiate_task(
                         TaskCls,
@@ -282,7 +281,7 @@ class Workflow:
                     lines = list(self._to_shell_lines(task.to_sh()))
 
                     # task.sh 저장
-                    t_sh = tdir / "task.sh"
+                    t_sh = tdir / f"{sid}_{t['name']}.sh"
                     t_sh.write_text("#!/usr/bin/env bash\nset -euo pipefail\n" + "\n".join(lines) + "\n")
                     t_sh.chmod(0o755)
 

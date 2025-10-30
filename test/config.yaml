@@ -2,6 +2,10 @@ SETTING:
   User: jhkim
   Node: all.q@ngsnode1
 
+  workflow_name: cbNIPT_QC_Pipeline
+  version: v0.0.1
+  description: ''
+
 WORK_PARAMETERS:
   input_path: /storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R{read}.fastq.gz
   work_dir_path: /storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Results/Test
@@ -32,8 +36,10 @@ TASK_LIST:
         json: "{WORK_DIR}/{sample_id}.fastp.json"
         html: "{WORK_DIR}/{sample_id}.fastp.html"
       PARAMS: 
+        image: /storage/images/fastp-0.23.4.sif
+        binds: ["/storage","/data"]
         threads: 2
-        PicoplexGold: False
+        PicoplexGold: True
         trim_front1: 0
         trim_front2: 0
         length_required: 100

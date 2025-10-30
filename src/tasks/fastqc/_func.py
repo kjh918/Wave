@@ -48,22 +48,19 @@ def build_fastqc_cmd(
     cmd: List[str] = [fastqc_bin]
     if extract:
         cmd.append("--extract")
-    cmd += ["--threads", str(int(threads)), "--outdir", out_dir]
+    cmd += ["--threads", str(int(threads)), "--outdir", str(out_dir)]
     cmd += list(map(str, inputs))
 
     # --- Singularity 사용 여부 ---
     if image:
-        bind_flags: List[str] = []
-        if binds:
-            for b in binds:
-                bind_flags += ["-B", b]
+        bind_flags = '-B ' + ','.join(binds) 
         cmd = [
             singularity_bin,
             "exec",
-            *bind_flags,
+            bind_flags,
             image,
             *cmd,  # fastqc 부분 그대로 삽입
         ]
-
+    print(cmd)
     # 최종 문자열
     return [" ".join(cmd)]
