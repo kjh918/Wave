@@ -1,6 +1,10 @@
 import os, sys, subprocess, string, random, time
 from pathlib import Path
 
+
+from src.utils.flags import skip_if_done, flag_on_complete
+
+
 class Executor:
     """Base Executor — 공통 기능 정의"""
 
@@ -58,6 +62,36 @@ class SunGridExecutor(Executor):
                 nodeList.append(f"{sql}@{sel}")
         return node in nodeList
 
+    def qsub_sh(self, node: str, script_path: str, threads: int = 1, memory: int | None = None,
+            job_id: str | None = None, random_jobid: bool = False) -> str:
+        """SGE qsub 제출"""
+        job_id = (
+            "".join(random.choice(string.ascii_letters) for _ in range(10))
+            if random_jobid else job_id
+        )
+
+        stdout_path = script_path.replace(".sh",".stdout")
+        stderr_path = script_path.replace(".sh",".stderr")
+
+        if memory is None:
+            qcmd = (
+                f"qsub -N {job_id} -q {node} "
+                f"-o {stdout_path} -e {stderr_path} "
+                f"-pe smp {threads} -V -cwd {script_path}"
+            )
+        else:
+            qcmd = (
+                f"qsub -N {job_id} -q {node} "
+                f"-o {stdout_path} -e {stderr_path} "
+                f"-l h_vmem={memory}G -pe smp {threads} -V -cwd {script_path}"
+            )
+
+        x = subprocess.check_output(qcmd, shell=True, encoding='utf-8')
+        qsub_id = x.split()[2]
+        return qsub_id
+    
+    @skip_if_done(flag_name=".done", require_outputs_ok=True)  # 실행 전 스킵
+    @flag_on_complete(flag_name=".done", fail_flag=".failed")  # 실행 후 플래그
     def run(self, node: str, cmd: str, threads: int = 1, memory: int | None = None,
             job_id: str | None = None, random_jobid: bool = False) -> str:
         """SGE qsub 제출"""
@@ -103,3 +137,6 @@ class SunGridExecutor(Executor):
                 break
             time.sleep(60)
         os.remove(qstat_path)
+
+    
+    def run_workflow(self, workflow_dict, )

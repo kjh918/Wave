@@ -15,7 +15,7 @@ def _norm_binds(binds: Optional[Sequence[str] | str]) -> str:
     if isinstance(binds, (list, tuple)):
         joined = ",".join(str(b) for b in binds if str(b).strip())
         return f"-B {joined}" if joined else ""
-    s = str(binds).strip()
+    s = str(binds).strip().strip('[').strip(']').replace(' ','')
     return f"-B {s}" if s else ""
 
 

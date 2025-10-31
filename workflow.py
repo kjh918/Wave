@@ -1,12 +1,14 @@
 # flexible_workflow.py
 from __future__ import annotations
-import os, re, yaml, shlex, subprocess, importlib, pkgutil, sys
+import os, re, yaml, shlex, subprocess, importlib, pkgutil, sys, json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Iterable
 
 # 베이스 Task & 레지스트리
 sys.path.append(os.path.dirname(__file__))
+
+from src.executor import Executor
 from src.tasks.task import Task
 from src.tasks.task import TaskRegistry  
 
@@ -186,7 +188,6 @@ class Workflow:
         for key, value in inputs.items():
             value = str(value)
             setted_inputs[key] = value.replace('{work_dir_path}', str(self.work_dir)).replace('{sample_id}', sample_id).replace('{WORK_DIR}', str(task_work_dir))
-        print(setted_inputs)
         return setted_inputs
     
     def _normalize_tasklist_legacy(self, task_list_raw: Any, sample_id: str) -> List[Dict[str, Any]]:
@@ -261,6 +262,34 @@ class Workflow:
             sid_root.mkdir(parents=True, exist_ok=True)
 
             # 마스터 스크립트
+            master_json = sid_root / f"workflow_{sid}.json"
+            
+            
+
+            for _task in tasks_norm:
+                tdir = _task['workdir']
+                tdir.mkdir(parents=True, exist_ok=True)
+
+                TaskCls = self._resolve_task_class(_task["type"])
+                task = _instantiate_task(
+                    TaskCls,
+                    name = _task["name"],
+                    workdir = tdir,
+                    inputs = _task.get("inputs", {}),
+                    outputs = _task.get("outputs", {}),
+                    params = _task.get("params", {}),
+                )
+
+                task_cmd = list(self._to_shell_lines(task.to_sh()))
+
+                task_list
+
+
+            # with open(master_json, "w") as json_file:
+            #     json.dump(student_data, json_file)
+
+
+
             master_sh = sid_root / f"workflow_{sid}.sh"
             with master_sh.open("w") as mf:
                 mf.write("#!/usr/bin/env bash\nset -euo pipefail\n")

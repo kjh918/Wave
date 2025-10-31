@@ -33,7 +33,7 @@ class FastQCRunner(Task):
             threads=int(p["threads"]),
             extract=bool(p["extract"]),
             image=p.get("image"),
-            binds=p.get("binds"),
+            binds=list(p.get("binds")),
             fastqc_bin=p.get("fastqc_bin", "fastqc"),
             singularity_bin=p.get("singularity_bin", "singularity"),
         )
