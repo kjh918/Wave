@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Iterable
 # 베이스 Task & 레지스트리
 sys.path.append(os.path.dirname(__file__))
 
-from src.executor import Executor
+from src.executor import SunGridExecutor
 from src.tasks.task import Task
 from src.tasks.task import TaskRegistry  
 
@@ -209,8 +209,9 @@ class Workflow:
 
             name, spec = next(iter(item.items()))
 
-            task_dir_name = self.work_dir / Path(f'{sample_id}/{idx:02d}_{name}')
-            
+            # task_dir_name = spec.get("WORK_DIR")
+            # print(task_dir_name)
+            # exit()
             ttype = spec.get("TOOL")
 
             if not isinstance(item, dict) or len(item) != 1:
@@ -232,7 +233,7 @@ class Workflow:
             
             norm.append({
                 "name": name,
-                "workdir": task_dir_name,
+                "workdir": Path(task_work_dir),
                 "type": ttype,
                 "inputs": inputs,
                 "outputs": outputs,
@@ -282,9 +283,18 @@ class Workflow:
 
                 task_cmd = list(self._to_shell_lines(task.to_sh()))
 
-                task_list
-
-
+                executor = SunGridExecutor(
+                    logdir = _task['workdir'] / 'qlog'
+                    )
+                # print(task_cmd)
+                # exit()
+                executor.run(
+                    node=self.workflow['SETTING']['Node'], 
+                    cmd=task_cmd[0], 
+                    threads = _task.get("params", {})['threads'],
+                    job_id = f'{sid}_{_task["name"]}'
+                    )
+                # print(tdir)
             # with open(master_json, "w") as json_file:
             #     json.dump(student_data, json_file)
 

@@ -68,10 +68,11 @@ def build_fastqc_cmd(
     # print(_norm_binds(binds))
     # exit()
     if image:
+        bflag = _norm_binds(binds).replace("'",'')
         cmd = [
             singularity_bin,
             "exec",
-            _norm_binds(binds),
+            bflag,
             image,
             *cmd,  # fastqc 부분 그대로 삽입
         ]

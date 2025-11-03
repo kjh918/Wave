@@ -138,5 +138,8 @@ class SunGridExecutor(Executor):
             time.sleep(60)
         os.remove(qstat_path)
 
+    def run_workflow(task_dict):
+
+        for key, value in task_dict:
+            
     
-    def run_workflow(self, workflow_dict, )
