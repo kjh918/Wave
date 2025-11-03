@@ -25,15 +25,27 @@ class Task(abc.ABC):
     TYPE: str
     DEFAULTS: Dict[str, Any] = {}
 
-    def __init__(self, name: str, workdir: Path,
-                 inputs: Dict[str, Any] = None,
-                 outputs: Dict[str, Any] = None,
-                 params: Dict[str, Any] = None):
+    def __init__(self, 
+                name: str,
+                tool: str,
+                func: str,
+                threads: int, 
+                workdir: Path,
+                inputs: Dict[str, Any] = None,
+                outputs: Dict[str, Any] = None,
+                params: Dict[str, Any] = None):
+                
         self.name = name
+        self.tool = tool
+        self.func = func
+        
+        self.threads = thread
         self.workdir = Path(workdir)
+        
         self.inputs = inputs or {}
         self.outputs = outputs or {}
         self.params = {**(self.DEFAULTS or {}), **(params or {})}
+        
         self.workdir.mkdir(parents=True, exist_ok=True)
 
     @abc.abstractmethod
