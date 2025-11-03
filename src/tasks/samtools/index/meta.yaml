@@ -1,0 +1,26 @@
+name: samtools.index
+version: "1.20"
+description: "Create BAM index (BAI/CSI) from a sorted BAM."
+
+schema:
+  inputs:
+    bam:
+      type: path
+      required: true
+      description: "Sorted BAM to index"
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory for index (defaults to BAM directory)"
+    index:
+      type: path
+      required: false
+      description: "Output index path (.bai or .csi)"
+  params:
+    threads:         {type: int,    default: 8}
+    index_type:      {type: string, default: "bai"}   # 'bai' or 'csi'
+    samtools_bin:    {type: string, default: "samtools"}
+    image:           {type: path|null, default: null}
+    binds:           {type: list|string|null, default: null}
+    singularity_bin: {type: string, default: "singularity"}

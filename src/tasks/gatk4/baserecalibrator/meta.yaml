@@ -1,0 +1,54 @@
+name: gatk.baserecalibrator
+version: "4.4.0.0"
+description: "Generate base recalibration table using GATK4 BaseRecalibrator."
+
+schema:
+  inputs:
+    bam:
+      type: path
+      required: true
+      description: "Input BAM (dedup or realigned)"
+    reference:
+      type: path
+      required: true
+      description: "Reference FASTA"
+    known_sites:
+      type: list
+      required: true
+      description: "List of known-sites VCFs"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory (defaults to workdir)"
+    table:
+      type: path
+      required: false
+      description: "BQSR table path (auto-generated if omitted)"
+
+  params:
+    gatk_bin:
+      type: string
+      default: "gatk"
+      description: "GATK executable"
+    image:
+      type: path|null
+      default: "/storage/images/gatk-4.4.0.0.sif"
+      description: "Singularity image path; null to use local binary"
+    binds:
+      type: list|string|null
+      default: ["/storage", "/data"]
+      description: "Bind mounts for Singularity"
+    singularity_bin:
+      type: string
+      default: "singularity"
+      description: "Singularity executable"
+    parallel_gc_threads:
+      type: int
+      default: 14
+      description: "Java Parallel GC threads"
+    xmx_gb:
+      type: int
+      default: 16
+      description: "Java heap in GB"

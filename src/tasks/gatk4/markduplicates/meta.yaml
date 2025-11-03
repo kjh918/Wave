@@ -1,0 +1,58 @@
+name: gatk.markduplicates
+version: "4.4.0.0"
+description: "Mark duplicate reads using GATK4 MarkDuplicates (optionally remove sequencing duplicates and create index)."
+
+schema:
+  inputs:
+    bam:
+      type: path
+      required: true
+      description: "Sorted BAM input"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory (defaults to workdir)"
+    bam:
+      type: path
+      required: false
+      description: "Deduplicated BAM output (auto-generated if omitted)"
+    metrics:
+      type: path
+      required: false
+      description: "Metrics file path (auto-generated if omitted)"
+
+  params:
+    gatk_bin:
+      type: string
+      default: "gatk"
+      description: "GATK executable"
+    image:
+      type: path|null
+      default: "/storage/images/gatk-4.4.0.0.sif"
+      description: "Singularity image path; null to use local binary"
+    binds:
+      type: list|string|null
+      default: ["/storage", "/data"]
+      description: "Bind mounts for Singularity"
+    singularity_bin:
+      type: string
+      default: "singularity"
+      description: "Singularity executable"
+    parallel_gc_threads:
+      type: int
+      default: 14
+      description: "Java Parallel GC threads"
+    xmx_gb:
+      type: int
+      default: 16
+      description: "Java heap in GB"
+    create_index:
+      type: bool
+      default: true
+      description: "Whether to write index for output BAM"
+    remove_sequencing_duplicates:
+      type: bool
+      default: true
+      description: "Remove optical/sequencing duplicates"

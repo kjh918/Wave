@@ -1,0 +1,90 @@
+name: fastp
+version: "0.23.4"
+description: "Adapter trimming and quality filtering for FASTQ files using fastp (supports PE/SE and Singularity)."
+
+schema:
+  inputs:
+    read1:
+      type: path
+      required: true
+      description: "R1 FASTQ(.gz) absolute path"
+    read2:
+      type: path
+      required: false
+      description: "R2 FASTQ(.gz) absolute path (optional for SE mode)"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory for trimmed FASTQs and reports (defaults to workdir)"
+    read1:
+      type: path
+      required: false
+      description: "Trimmed R1 FASTQ output path (auto-generated if omitted)"
+    read2:
+      type: path
+      required: false
+      description: "Trimmed R2 FASTQ output path (auto-generated if omitted)"
+    json:
+      type: path
+      required: false
+      description: "fastp JSON report path (auto-generated if omitted)"
+    html:
+      type: path
+      required: false
+      description: "fastp HTML report path (auto-generated if omitted)"
+
+  params:
+    threads:
+      type: int
+      default: 4
+      description: "Number of threads for fastp"
+    PicoplexGold:
+      type: bool
+      default: false
+      description: "If true, automatically apply --trim_front1/2 14 for Picoplex Gold protocol"
+    trim_front1:
+      type: int
+      default: 0
+      description: "Trim first N bases of R1 (default 14 if PicoplexGold)"
+    trim_front2:
+      type: int
+      default: 0
+      description: "Trim first N bases of R2 (default 14 if PicoplexGold)"
+    length_required:
+      type: int
+      default: 100
+      description: "Reads shorter than this length will be discarded"
+    average_qual:
+      type: int
+      default: 10
+      description: "Reads with average quality lower than this will be discarded"
+    qualified_quality_phred:
+      type: int
+      default: 15
+      description: "Minimum quality value for a base to be considered qualified"
+    adapter_sequence:
+      type: string
+      default: "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"
+      description: "Adapter sequence for R1"
+    adapter_sequence_r2:
+      type: string
+      default: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+      description: "Adapter sequence for R2 (used only in paired-end mode)"
+    image:
+      type: path|null
+      default: null
+      description: "Singularity image path; if null, run local fastp"
+    binds:
+      type: list|string|null
+      default: null
+      description: "Bind directories for Singularity, e.g. ['/storage','/data'] or '/storage,/data'"
+    fastp_bin:
+      type: string
+      default: "fastp"
+      description: "fastp binary name or path inside the container"
+    singularity_bin:
+      type: string
+      default: "singularity"
+      description: "Singularity executable name or path"

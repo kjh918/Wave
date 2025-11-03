@@ -39,7 +39,7 @@ class Task(abc.ABC):
         self.tool = tool
         self.func = func
         
-        self.threads = thread
+        self.threads = threads
         self.workdir = Path(workdir)
         
         self.inputs = inputs or {}

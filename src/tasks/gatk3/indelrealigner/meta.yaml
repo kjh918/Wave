@@ -1,0 +1,62 @@
+name: gatk3.indelrealigner
+version: "3.8-1"
+description: "Perform local realignment around indels (GATK3 IndelRealigner)."
+
+schema:
+  inputs:
+    bam:
+      type: path
+      required: true
+      description: "Deduplicated BAM"
+    reference:
+      type: path
+      required: true
+      description: "Reference FASTA"
+    intervals:
+      type: path
+      required: true
+      description: "Intervals produced by RealignerTargetCreator"
+    known_indel1:
+      type: path
+      required: true
+      description: "Known indel VCF 1"
+    known_indel2:
+      type: path
+      required: true
+      description: "Known indel VCF 2"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory (defaults to workdir)"
+    bam:
+      type: path
+      required: false
+      description: "Realigned BAM output (auto-generated if omitted)"
+
+  params:
+    image:
+      type: path
+      default: "/storage/images/gatk-3.8-1.sif"
+      description: "Singularity image path"
+    binds:
+      type: list|string|null
+      default: ["/storage", "/data"]
+      description: "Bind mounts for Singularity"
+    singularity_bin:
+      type: string
+      default: "singularity"
+      description: "Singularity executable"
+    xmx_gb:
+      type: int
+      default: 16
+      description: "Java heap in GB"
+    java_bin:
+      type: string
+      default: "java"
+      description: "Java executable"
+    jar:
+      type: path
+      default: "/usr/GenomeAnalysisTK.jar"
+      description: "Path to GenomeAnalysisTK.jar inside container"

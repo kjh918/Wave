@@ -1,0 +1,70 @@
+name: bwa.mem
+version: "0.7.17"
+description: "BWA MEM alignment task (paired-end) wrapped with Singularity"
+
+schema:
+  inputs:
+    r1:
+      type: path
+      required: true
+      description: "Trimmed R1 FASTQ file"
+    r2:
+      type: path
+      required: true
+      description: "Trimmed R2 FASTQ file"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory (defaults to workdir)"
+    sam:
+      type: path
+      required: false
+      description: "Output SAM path (auto-generated if omitted)"
+
+  params:
+    index:
+      type: path
+      required: true
+      description: "BWA index prefix"
+    threads:
+      type: int
+      default: 8
+      description: "Thread count for BWA MEM"
+    image:
+      type: path
+      default: "/storage/images/bwa-0.7.17.sif"
+      description: "Singularity image path"
+    binds:
+      type: list
+      default: ["/storage", "/data"]
+      description: "Bind directories for Singularity"
+    singularity_bin:
+      type: string
+      default: "singularity"
+      description: "Singularity executable"
+    bwa_bin:
+      type: string
+      default: "bwa"
+      description: "BWA executable name inside container"
+    rg_id:
+      type: string|null
+      default: null
+      description: "Read Group ID"
+    rg_pl:
+      type: string
+      default: "ILLUMINA"
+      description: "Read Group Platform"
+    rg_lb:
+      type: string|null
+      default: null
+      description: "Read Group Library"
+    rg_sm:
+      type: string|null
+      default: null
+      description: "Sample name"
+    rg_cn:
+      type: string|null
+      default: null
+      description: "Sequencing center"

@@ -1,0 +1,37 @@
+name: fastqc
+version: "0.12.1"
+description: "Run FastQC on FASTQ files (PE/SE)."
+
+schema:
+  inputs:
+    read1:
+      type: path
+      required: true
+      description: "R1 FASTQ(.gz) absolute path"
+    read2:
+      type: path
+      required: false
+      description: "R2 FASTQ(.gz) absolute path (optional)"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Result directory. If omitted, defaults to WORK_DIR."
+
+  params:
+    extract:
+      type: bool
+      default: true
+    image:
+      type: path|null
+      default: null
+    binds:
+      type: list|string|null
+      default: null
+    fastqc_bin:
+      type: string
+      default: "fastqc"
+    singularity_bin:
+      type: string
+      default: "singularity"
