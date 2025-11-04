@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(__file__))
 
 from src.executor import SunGridExecutor
 from src.tasks.task import Task
-from src.tasks.task import TaskRegistry  
+from src.tasks.task_registry import TaskRegistry
 
 
 # --------------------------
@@ -67,40 +67,35 @@ def _sh_join(argv: Iterable[str]) -> str:
 # --------------------------
 # 핵심: Task 인스턴스 안전 생성 (여러 시그니처 지원)
 # --------------------------
-def _instantiate_task(TaskCls, *, name: str, workdir: Path,
-                      inputs: Dict[str, Any], outputs: Dict[str, Any],
-                      params: Dict[str, Any]) -> Task:
+def _instantiate_task(
+        TaskCls,
+        *,
+        name: str,
+        tool: str,
+        func: str,
+        threads: int,
+        workdir: Path,
+        inputs: Dict[str, Any],
+        outputs: Dict[str, Any],
+        params: Dict[str, Any],
+    ):
     """
-    팀마다 Task 생성자 시그니처가 달라 발생하는 호환 이슈를 흡수.
-    아래 순서로 시도:
-      1) (name, workdir, inputs, outputs, params)
-      2) (name, params, workdir)
-      3) (name, workdir, params)
-      4) (name=name, workdir=..., inputs=..., outputs=..., params=...)
+    현재 Task 시그니처:
+        __init__(self, name, tool, func, threads, workdir, inputs=None, outputs=None, params=None)
     """
-    # 1) 완전형
     try:
-        return TaskCls(name=name, workdir=workdir, inputs=inputs, outputs=outputs, params=params)
-    except TypeError:
-        pass
-    # 2) (name, params, workdir)
-    try:
-        return TaskCls(name, params, workdir)
-    except TypeError:
-        pass
-    # 3) (name, workdir, params)
-    try:
-        return TaskCls(name, workdir, params)
-    except TypeError:
-        pass
-    # 4) 키워드만
-    try:
-        return TaskCls(name=name, params=params, workdir=workdir)
+        return TaskCls(
+            name=name,
+            tool=tool,
+            func=func,
+            threads=int(threads),
+            workdir=workdir,
+            inputs=inputs,
+            outputs=outputs,
+            params=params,
+        )
     except TypeError as e:
-        raise TypeError(f"Cannot instantiate task '{name}' with supported signatures: {e}")
-
-
-# --------------------------
+        raise TypeError(f"[Task instantiate] Cannot create '{name}' ({tool}.{func}) → {e}")
 # 메인 Workflow
 # --------------------------
 @dataclass
@@ -272,16 +267,18 @@ class Workflow:
             # 마스터 스크립트
             master_json = sid_root / f"workflow_{sid}.json"
             
-            
 
             for _task in tasks_norm:
                 tdir = _task['workdir']
                 tdir.mkdir(parents=True, exist_ok=True)
-                TaskCls = self._resolve_task_class(type_name=_task["tool"], func_name=_task["func"])
+                TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
+
+
                 task = _instantiate_task(
                     TaskCls,
                     name = _task["name"],
                     tool = _task["tool"],
+                    func = _task["func"],
                     threads = _task["threads"],
                     workdir = tdir,
                     inputs = _task.get("inputs", {}),
@@ -291,7 +288,7 @@ class Workflow:
 
                 task_cmd = list(self._to_shell_lines(task.to_sh()))
                 print(task_cmd)
-                exit()
+                # exit()
                 # executor = SunGridExecutor(
                 #     logdir = _task['workdir'] / 'qlog'
                 #     )
@@ -319,11 +316,13 @@ class Workflow:
                     TaskCls = self._resolve_task_class(t["type"])
                     task = _instantiate_task(
                         TaskCls,
-                        name=t["name"],
-                        workdir=tdir,
-                        inputs=t.get("inputs", {}),
-                        outputs=t.get("outputs", {}),
-                        params=t.get("params", {}),
+                        name = _task["name"],
+                        tool = _task["tool"],
+                        threads = _task["threads"],
+                        workdir = tdir,
+                        inputs = _task.get("inputs", {}),
+                        outputs = _task.get("outputs", {}),
+                        params = _task.get("params", {}),
                     )
                     # 커맨드 라인 생성
                     lines = list(self._to_shell_lines(task.to_sh()))
@@ -363,31 +362,96 @@ class Workflow:
     # --------------------------
     # 내부 헬퍼
     # --------------------------
-    def _resolve_task_class(self, type_name: str, func_name: str):
-        if func_name == 'None':
-            try:
-                return TaskRegistry.get(type_name)
-            except Exception:
-                # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
-                try:
-                    print(f"src.tasks.{type_name}.main")
-                    importlib.import_module(f"src.tasks.{type_name}.main")
-                except ModuleNotFoundError:
-                    pass
-                # 재시도 (여전히 없으면 KeyError 발생)
-                return TaskRegistry.get(type_name)
+
+    def _resolve_task_class(self, tool: str, func: Optional[str] = None):
+        key = tool if not func else f"{tool}.{func}"  # ✅ 키에는 .main 금지
+
+        # 1) 먼저 레지스트리 조회
+        try:
+            return TaskRegistry.get(key)
+        except KeyError:
+            pass
+
+        # 2) 모듈 임포트 시도 (여기서만 .main 사용)
+        if func:
+            module_path = f"src.tasks.{tool}.{func}.main"
         else:
-            try:
-                return TaskRegistry.get(type_name)
-            except Exception:
-                # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
-                try:
-                    print(f"src.tasks.{type_name}.{func_name}.main")
-                    importlib.import_module(f"src.tasks.{type_name}.{func_name}.main")
-                except ModuleNotFoundError:
-                    pass
-                # 재시도 (여전히 없으면 KeyError 발생)
-                return TaskRegistry.get(type_name)
+            module_path = f"src.tasks.{tool}.main"
+
+        try:
+            import importlib
+            importlib.import_module(module_path)  # 레지스트리 등록 트리거
+        except ModuleNotFoundError as e:
+            raise KeyError(f"Task module not found: {module_path}") from e
+
+        # 3) 다시 레지스트리 조회
+        return TaskRegistry.get(key)
+    # def _resolve_task_class(self, tool: str, func: Optional[str] = None):
+    #     tool = (tool or "").strip().lower()
+    #     func = (func or "").strip().lower() if func else None
+
+    #     # ---- 1) 레지스트리 즉시 조회
+    #     if func:
+    #         key = f"{tool}.{func}.main"
+    #         try:
+    #             return TaskRegistry.get(key)
+    #         except KeyError:
+    #             pass
+    #         # 2-a) 다기능 모듈 임포트: src.tasks.<tool>.<func>.main → 재조회
+    #         for mod in (f"src.tasks.{tool}.{func}.main", f"src.tasks.{tool}.main"):
+    #             try:
+    #                 importlib.import_module(mod)
+    #                 break
+    #             except ModuleNotFoundError:
+    #                 continue
+    #         return TaskRegistry.get(key)  # 없으면 여기서 KeyError
+
+    #     else:
+    #         # 단일 기능: 'tool' → 'tool.run'
+    #         for key in (tool, f"{tool}.run"):
+    #             try:
+    #                 return TaskRegistry.get(key)
+    #             except KeyError:
+    #                 pass
+    #         # 2-b) 단일 기능 모듈 임포트: src.tasks.<tool>.main → 재조회
+    #         for mod in (f"src.tasks.{tool}.main", f"src.tasks.{tool}"):
+    #             try:
+    #                 importlib.import_module(mod)
+    #                 break
+    #             except ModuleNotFoundError:
+    #                 continue
+    #         for key in (tool, f"{tool}.run"):
+    #             try:
+    #                 return TaskRegistry.get(key)
+    #             except KeyError:
+    #                 continue
+    #         raise KeyError(f"Task not found for tool='{tool}'")
+    # def _resolve_task_class(self, type_name: str, func_name: bool):
+    #     if str(func_name) == 'None':
+    #         try:
+    #             return TaskRegistry.get(f'{type_name}.run')
+    #         except Exception:
+    #             # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
+    #             try:
+    #                 print(f"src.tasks.{type_name}.main")
+    #                 importlib.import_module(f"src.tasks.{type_name}.main")
+    #                 importlib.import_module(f"src.tasks.{type_name}.run")
+    #             except ModuleNotFoundError:
+    #                 pass
+    #             # 재시도 (여전히 없으면 KeyError 발생)
+    #             return TaskRegistry.get(type_name)
+    #     else:
+    #         try:
+    #             return TaskRegistry.get(type_name)
+    #         except Exception:
+    #             # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
+    #             try:
+    #                 print(f"src.tasks.{type_name}.{func_name}.main")
+    #                 importlib.import_module(f"src.tasks.{type_name}.{func_name}.main")
+    #             except ModuleNotFoundError:
+    #                 pass
+    #             # 재시도 (여전히 없으면 KeyError 발생)
+    #             return TaskRegistry.get(type_name)
 
     def _to_shell_lines(self, lines: Iterable[str]) -> Iterable[str]:
         """

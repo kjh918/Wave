@@ -4,7 +4,8 @@ from typing import Dict, Any, List, Optional, Sequence
 from pathlib import Path
 import os
 
-from src.tasks.task import Task, TaskRegistry
+from src.tasks.task import Task
+from src.tasks.task_registry import register_task
 from src.tasks.utils import (   # ← utils 로 고정
     ensure_dir,
     normalize_binds,
@@ -23,7 +24,8 @@ def _prefix_from_read1(r1: str) -> str:
             return name[:-len(ext)]
     return os.path.splitext(name)[0]
 
-@TaskRegistry.register
+# @TaskRegistry.register('fastp')
+@register_task('fastp')
 class FastpTask(Task):
     TYPE = "fastp"
 

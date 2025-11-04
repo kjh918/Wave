@@ -3,8 +3,9 @@ from typing import Dict, Any, List, Optional, Sequence
 from pathlib import Path
 import os
 
-from src.tasks.task import Task, TaskRegistry
-from src.tasks.util import (
+from src.tasks.task import Task
+from src.tasks.task_registry import register_task
+from src.tasks.utils import (
     ensure_dir,
     normalize_binds,
     singularity_exec_cmd,
@@ -12,7 +13,7 @@ from src.tasks.util import (
 )
 
 
-@TaskRegistry.register
+@register_task("picard.fastqtosam")   # ← 여기서 키 등록
 class PicardFastqToSamTask(Task):
     """
     Picard FastqToSam 실행 태스크

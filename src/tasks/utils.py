@@ -1,7 +1,7 @@
 # src/tasks/util.py
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Iterable, Sequence, Optional, List, Union
+from typing import Any, Iterable, Sequence, Optional, List, Union, Callable , Dict
 import shlex
 
 def ensure_dir(path: Union[str, Path]) -> str:
@@ -52,3 +52,30 @@ def join_argv_lines(lines: Iterable[Union[str, Sequence[Any]]]) -> List[str]:
         else:
             out.append(str(ln))
     return out
+
+def to_sh_from_builder(
+    *,
+        builder: Callable[..., Iterable[Union[str, Sequence[str]]]],
+        inputs: Dict[str, Any],
+        outputs: Dict[str, Any],
+        params: Dict[str, Any],
+        threads: int,
+        workdir: str,
+        sample_id: Optional[str] = None,
+        ensure_output_dir_key: Optional[str] = None,
+    ) -> List[str]:
+    # 필요 시 결과 디렉토리 생성
+    if ensure_output_dir_key:
+        out_dir = outputs.get(ensure_output_dir_key)
+        if out_dir:
+            outputs[ensure_output_dir_key] = ensure_dir(out_dir)
+    # 빌더 호출 → 라인 합치기
+    lines = builder(
+        inputs=inputs,
+        outputs=outputs,
+        params=params,
+        threads=threads,
+        workdir=workdir,
+        sample_id=sample_id,
+    )
+    return join_argv_lines(lines)
