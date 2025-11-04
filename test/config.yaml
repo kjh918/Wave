@@ -13,21 +13,21 @@ WORK_PARAMETERS:
 TASK_LIST:
   - Rawdata_FastQC:
       TOOL: fastqc
-      FUNC: run
       WORK_DIR: "{work_dir_path}/{sample_id}/00_Rawdata_FastQC"
-      THREADs: 2
+      THREADS: 2
       INPUT:
         read1: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R1.fastq.gz"
-        reqd2: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R2.fastq.gz"
+        read2: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R2.fastq.gz"
       OUTPUT:
         read1: "{WORK_DIR}/{sample_id}_R1_fastqc/fastqc_data.txt"
-        reqd2: "{WORK_DIR}/{sample_id}_R2_fastqc/fastqc_data.txt"
+        read2: "{WORK_DIR}/{sample_id}_R2_fastqc/fastqc_data.txt"
       PARAMS:
         extract: true
   
   - Trimdata_FastP: 
       TOOL: fastp
       WORK_DIR: "{work_dir_path}/{sample_id}/01_Trimdata_FastP"
+      THREADS: 2
       INPUT:
         read1: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R1.fastq.gz"
         read2: "/storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R2.fastq.gz"
@@ -39,7 +39,7 @@ TASK_LIST:
       PARAMS: 
         image: /storage/images/fastp-0.23.4.sif
         binds: ["/storage","/data"]
-        threads: 2
+        THREADS: 2
         PicoplexGold: True
         trim_front1: 0
         trim_front2: 0
@@ -50,6 +50,7 @@ TASK_LIST:
   - Trimdata_FastQC:
       TOOL: fastqc
       WORK_DIR: "{work_dir_path}/{sample_id}/02_Trimdata_FastQC"
+      THREADS: 2
       INPUT:
         read1: "{work_dir_path}/{sample_id}/01_Trimdata_FastP/{sample_id}_R1.trimed.fastq.gz"
         reqd2: "{work_dir_path}/{sample_id}/01_Trimdata_FastP/{sample_id}_R2.trimed.fastq.gz"
@@ -57,14 +58,14 @@ TASK_LIST:
         read1: "{WORK_DIR}/{sample_id}_R1.trimed_fastqc/fastqc_data.txt"
         reqd2: "{WORK_DIR}/{sample_id}_R2.trimed_fastqc/fastqc_data.txt"
       PARAMS:
-        threads: 4
+        THREADS: 4
         extract: true
 
   - Picard_FastqToSam:
       TOOL: picard
       FUNC: fastqtosam
       WORK_DIR: "{work_dir_path}/{sample_id}/02_FastqToSam"
-      THREADs: 14                  # (옵션) 인터페이스 상 존재, 실제 picard 호출엔 java 옵션으로 반영
+      THREADS: 14                  # (옵션) 인터페이스 상 존재, 실제 picard 호출엔 java 옵션으로 반영
       INPUT:
         read1: "{TrimFastqDir}/{sample_id}.trimmed_R1.fastq.gz"
         read2: "{TrimFastqDir}/{sample_id}.trimmed_R2.fastq.gz"
@@ -80,48 +81,48 @@ TASK_LIST:
         java_bin: "java"
         jar: "/storage/apps/bin/picard.jar"
         xmx_gb: 16
-        parallel_gc_threads: 14
+        parallel_gc_THREADS: 14
 
-        - Picard_MergeBamAlignment:
-    TOOL: picard
-    FUNC: mergebamalignment
-    WORK_DIR: "{work_dir_path}/{sample_id}/03_Merge"
-    INPUT:
-      unmapped_bam: "{work_dir_path}/{sample_id}/02_FastqToSam/{sample_id}.fastqtosam.bam"
-      aligned_bam:  "{work_dir_path}/{sample_id}/02_Bwa/{sample_id}.bwa.mem.sam"
-      reference:    "/ref/hg38.fa"
-    OUTPUT:
-      bam: "{WORK_DIR}/{sample_id}.primary.bam"
+  - Picard_MergeBamAlignment:
+      TOOL: picard
+      FUNC: mergebamalignment
+      WORK_DIR: "{work_dir_path}/{sample_id}/03_Merge"
+      INPUT:
+        unmapped_bam: "{work_dir_path}/{sample_id}/02_FastqToSam/{sample_id}.fastqtosam.bam"
+        aligned_bam:  "{work_dir_path}/{sample_id}/02_Bwa/{sample_id}.bwa.mem.sam"
+        reference:    "/ref/hg38.fa"
+      OUTPUT:
+        bam: "{WORK_DIR}/{sample_id}.primary.bam"
 
   - Samtools_Sort:
       TOOL: samtools
       FUNC: sort
+      THREADS: 4
       WORK_DIR: "{work_dir_path}/{sample_id}/04_Sort"
       INPUT:
         bam_in: "{work_dir_path}/{sample_id}/03_Merge/{sample_id}.primary.bam"
       OUTPUT:
         bam: "{WORK_DIR}/{sample_id}.sorted.bam"
       PARAMS:
-        threads: 8
         mem_per_thread: "1G"
 
   - Samtools_Index:
       TOOL: samtools
       FUNC: index
+      THREADS: 4
       WORK_DIR: "{work_dir_path}/{sample_id}/05_Index"
       INPUT:
         bam: "{work_dir_path}/{sample_id}/04_Sort/{sample_id}.sorted.bam"
       OUTPUT:
         index: "{WORK_DIR}/{sample_id}.sorted.bam.bai"
       PARAMS:
-        threads: 8
         index_type: bai
 
-         - MarkDuplicates:
+  - MarkDuplicates:
       TOOL: gatk
       FUNC: markduplicates
       WORK_DIR: "{work_dir_path}/{sample_id}/04_MarkDuplicates"
-      THREADs: 14
+      THREADS: 14
       INPUT:
         bam: "{work_dir_path}/{sample_id}/04_Sort/{sample_id}.sorted.bam"
       OUTPUT:
@@ -132,7 +133,7 @@ TASK_LIST:
         create_index: true
         remove_sequencing_duplicates: true
         xmx_gb: 16
-        parallel_gc_threads: 14
+        parallel_gc_THREADS: 14
         image: "/storage/images/gatk-4.4.0.0.sif"
         binds: ["/storage", "/data"]
 
@@ -141,7 +142,7 @@ TASK_LIST:
       TOOL: gatk3
       FUNC: realignertargetcreator
       WORK_DIR: "{work_dir_path}/{sample_id}/05_Realign"
-      THREADs: 8
+      THREADS: 8
       INPUT:
         bam: "{work_dir_path}/{sample_id}/04_MarkDuplicates/{sample_id}.sorted.dedup.bam"
         reference: "/storage/ref/hg38.fa"
@@ -161,7 +162,7 @@ TASK_LIST:
       TOOL: gatk3
       FUNC: indelrealigner
       WORK_DIR: "{work_dir_path}/{sample_id}/05_Realign"
-      THREADs: 1
+      THREADS: 1
       INPUT:
         bam: "{work_dir_path}/{sample_id}/04_MarkDuplicates/{sample_id}.sorted.dedup.bam"
         reference: "/storage/ref/hg38.fa"
@@ -181,7 +182,7 @@ TASK_LIST:
       TOOL: gatk
       FUNC: baserecalibrator
       WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
-      THREADs: 14
+      THREADS: 14
       INPUT:
         bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
         reference: "/storage/ref/hg38.fa"
@@ -194,7 +195,7 @@ TASK_LIST:
         table: "{WORK_DIR}/{sample_id}.recal.table.txt"
       PARAMS:
         xmx_gb: 16
-        parallel_gc_threads: 14
+        parallel_gc_THREADS: 14
         image: "/storage/images/gatk-4.4.0.0.sif"
         binds: ["/storage", "/data"]
 
@@ -203,7 +204,7 @@ TASK_LIST:
       TOOL: gatk
       FUNC: applybqsr
       WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
-      THREADs: 14
+      THREADS: 14
       INPUT:
         bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
         bqsr_table: "{work_dir_path}/{sample_id}/06_BQSR/{sample_id}.recal.table.txt"
@@ -212,6 +213,6 @@ TASK_LIST:
         bam: "{WORK_DIR}/{sample_id}.recal.bam"
       PARAMS:
         xmx_gb: 16
-        parallel_gc_threads: 14
+        parallel_gc_THREADS: 14
         image: "/storage/images/gatk-4.4.0.0.sif"
         binds: ["/storage", "/data"]

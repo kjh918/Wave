@@ -195,6 +195,8 @@ class Workflow:
         TASK_LIST:
           - <name>:
               TOOL: <type>
+              FUNC: <type>
+              THREADS: <int>
               WORK_DIR: <Path>
               INPUT:  { read1: "...", read2: "..." }
               OUTPUT: { dirname: "..." }
@@ -213,6 +215,8 @@ class Workflow:
             # print(task_dir_name)
             # exit()
             ttype = spec.get("TOOL")
+            func = spec.get("FUNC")
+            threads = spec.get("THREADS") or 1
 
             if not isinstance(item, dict) or len(item) != 1:
                 raise ValueError(f"Invalid TASK_LIST entry: {item}")
@@ -227,14 +231,17 @@ class Workflow:
             params = spec.get("PARAMS", {}) or {}
             task_work_dir = task_work_dir.replace('{work_dir_path}', str(self.work_dir)).replace('{sample_id}', sample_id)
             
+
             inputs = self._set_params(sample_id, task_work_dir, inp)
             outputs = self._set_params(sample_id, task_work_dir, outp)
             params = self._set_params(sample_id, task_work_dir, params)
             
             norm.append({
                 "name": name,
+                "tool": ttype,
+                "func": func,
+                "threads": threads,
                 "workdir": Path(task_work_dir),
-                "type": ttype,
                 "inputs": inputs,
                 "outputs": outputs,
                 "params": params,
@@ -270,11 +277,12 @@ class Workflow:
             for _task in tasks_norm:
                 tdir = _task['workdir']
                 tdir.mkdir(parents=True, exist_ok=True)
-
-                TaskCls = self._resolve_task_class(_task["type"])
+                TaskCls = self._resolve_task_class(type_name=_task["tool"], func_name=_task["func"])
                 task = _instantiate_task(
                     TaskCls,
                     name = _task["name"],
+                    tool = _task["tool"],
+                    threads = _task["threads"],
                     workdir = tdir,
                     inputs = _task.get("inputs", {}),
                     outputs = _task.get("outputs", {}),
@@ -282,18 +290,19 @@ class Workflow:
                 )
 
                 task_cmd = list(self._to_shell_lines(task.to_sh()))
-
-                executor = SunGridExecutor(
-                    logdir = _task['workdir'] / 'qlog'
-                    )
-                # print(task_cmd)
-                # exit()
-                executor.run(
-                    node=self.workflow['SETTING']['Node'], 
-                    cmd=task_cmd[0], 
-                    threads = _task.get("params", {})['threads'],
-                    job_id = f'{sid}_{_task["name"]}'
-                    )
+                print(task_cmd)
+                exit()
+                # executor = SunGridExecutor(
+                #     logdir = _task['workdir'] / 'qlog'
+                #     )
+                # # print(task_cmd)
+                # # exit()
+                # executor.run(
+                #     node=self.workflow['SETTING']['Node'], 
+                #     cmd=task_cmd[0], 
+                #     threads = _task.get("params", {})['threads'],
+                #     job_id = f'{sid}_{_task["name"]}'
+                #     )
                 # print(tdir)
             # with open(master_json, "w") as json_file:
             #     json.dump(student_data, json_file)
@@ -354,17 +363,31 @@ class Workflow:
     # --------------------------
     # 내부 헬퍼
     # --------------------------
-    def _resolve_task_class(self, type_name: str):
-        try:
-            return TaskRegistry.get(type_name)
-        except Exception:
-            # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
+    def _resolve_task_class(self, type_name: str, func_name: str):
+        if func_name == 'None':
             try:
-                importlib.import_module(f"src.tasks.{type_name}.{type_name}")
-            except ModuleNotFoundError:
-                pass
-            # 재시도 (여전히 없으면 KeyError 발생)
-            return TaskRegistry.get(type_name)
+                return TaskRegistry.get(type_name)
+            except Exception:
+                # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
+                try:
+                    print(f"src.tasks.{type_name}.main")
+                    importlib.import_module(f"src.tasks.{type_name}.main")
+                except ModuleNotFoundError:
+                    pass
+                # 재시도 (여전히 없으면 KeyError 발생)
+                return TaskRegistry.get(type_name)
+        else:
+            try:
+                return TaskRegistry.get(type_name)
+            except Exception:
+                # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
+                try:
+                    print(f"src.tasks.{type_name}.{func_name}.main")
+                    importlib.import_module(f"src.tasks.{type_name}.{func_name}.main")
+                except ModuleNotFoundError:
+                    pass
+                # 재시도 (여전히 없으면 KeyError 발생)
+                return TaskRegistry.get(type_name)
 
     def _to_shell_lines(self, lines: Iterable[str]) -> Iterable[str]:
         """
