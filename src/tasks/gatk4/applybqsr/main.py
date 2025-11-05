@@ -2,12 +2,20 @@
 from __future__ import annotations
 from typing import Dict, Any, List, Sequence, Optional
 import os, shlex
-from src.tasks.task import Task, TaskRegistry
-from src.tasks.util import ensure_dir, normalize_binds, singularity_exec_cmd, to_sh_from_builder
 
-@TaskRegistry.register
+
+from src.tasks.task import Task
+from src.tasks.task_registry import register_task
+from src.tasks.utils import (
+    ensure_dir,
+    normalize_binds,
+    singularity_exec_cmd,
+    to_sh_from_builder,
+)
+
+@register_task("gatk4.applybqsr")
 class GatkApplyBQSRTask(Task):
-    TYPE = "gatk.applybqsr"
+    TYPE = "gatk4.applybqsr"
 
     INPUTS = {
         "bam": {"type": "path", "required": True, "desc": "BAM (post-dedup or realigned)"},

@@ -313,11 +313,14 @@ class Workflow:
                     tdir = t['workdir']
                     tdir.mkdir(parents=True, exist_ok=True)
                     # Task 인스턴스 생성
-                    TaskCls = self._resolve_task_class(t["type"])
+                    TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
+
+
                     task = _instantiate_task(
                         TaskCls,
                         name = _task["name"],
                         tool = _task["tool"],
+                        func = _task["func"],
                         threads = _task["threads"],
                         workdir = tdir,
                         inputs = _task.get("inputs", {}),

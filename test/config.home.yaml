@@ -119,7 +119,7 @@ TASK_LIST:
         index_type: bai
 
   - MarkDuplicates:
-      TOOL: gatk
+      TOOL: gatk4
       FUNC: markduplicates
       WORK_DIR: "{work_dir_path}/{sample_id}/04_MarkDuplicates"
       THREADS: 14
@@ -178,41 +178,40 @@ TASK_LIST:
         binds: ["/storage", "/data"]
 
   # 4) BaseRecalibrator (GATK4)
-  - BaseRecalibrator:
-      TOOL: gatk
-      FUNC: baserecalibrator
-      WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
-      THREADS: 14
-      INPUT:
-        bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
-        reference: "/storage/ref/hg38.fa"
-        known_sites:
-          - "/storage/ref/known_snps.vcf.gz"
-          - "/storage/ref/known_indels1.vcf.gz"
-          - "/storage/ref/known_indels2.vcf.gz"
-      OUTPUT:
-        dir: "{WORK_DIR}"
-        table: "{WORK_DIR}/{sample_id}.recal.table.txt"
-      PARAMS:
-        xmx_gb: 16
-        parallel_gc_THREADS: 14
-        image: "/storage/images/gatk-4.4.0.0.sif"
-        binds: ["/storage", "/data"]
+  # - BaseRecalibrator:
+  #     TOOL: gatk4
+  #     FUNC: baserecalibrator
+  #     WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
+  #     THREADS: 14
+  #     INPUT:
+  #       bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
+  #       reference: "/storage/ref/hg38.fa"
+  #     OUTPUT:
+  #       dir: "{WORK_DIR}"
+  #       table: "{WORK_DIR}/{sample_id}.recal.table.txt"
+  #     PARAMS:
+  #       known_site1: "/storage/ref/known_snps.vcf.gz"
+  #       known_site2: "/storage/ref/known_indels1.vcf.gz"
+  #       known_site3: "/storage/ref/known_indels2.vcf.gz"
+  #       xmx_gb: 16
+  #       parallel_gc_THREADS: 14
+  #       image: "/storage/images/gatk-4.4.0.0.sif"
+  #       binds: ["/storage", "/data"]
 
-  # 5) ApplyBQSR (GATK4)
-  - ApplyBQSR:
-      TOOL: gatk
-      FUNC: applybqsr
-      WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
-      THREADS: 14
-      INPUT:
-        bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
-        bqsr_table: "{work_dir_path}/{sample_id}/06_BQSR/{sample_id}.recal.table.txt"
-      OUTPUT:
-        dir: "{WORK_DIR}"
-        bam: "{WORK_DIR}/{sample_id}.recal.bam"
-      PARAMS:
-        xmx_gb: 16
-        parallel_gc_THREADS: 14
-        image: "/storage/images/gatk-4.4.0.0.sif"
-        binds: ["/storage", "/data"]
+  # # 5) ApplyBQSR (GATK4)
+  # - ApplyBQSR:
+  #     TOOL: gatk4
+  #     FUNC: applybqsr
+  #     WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
+  #     THREADS: 14
+  #     INPUT:
+  #       bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
+  #       bqsr_table: "{work_dir_path}/{sample_id}/06_BQSR/{sample_id}.recal.table.txt"
+  #     OUTPUT:
+  #       dir: "{WORK_DIR}"
+  #       bam: "{WORK_DIR}/{sample_id}.recal.bam"
+  #     PARAMS:
+  #       xmx_gb: 16
+  #       parallel_gc_THREADS: 14
+  #       image: "/storage/images/gatk-4.4.0.0.sif"
+  #       binds: ["/storage", "/data"]
