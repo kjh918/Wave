@@ -18,15 +18,15 @@ class GatkBaseRecalibratorTask(Task):
 
     INPUTS = {
         "bam": {"type": "path", "required": True, "desc": "Input BAM"},
-        "reference": {"type": "path", "required": True, "desc": "Reference FASTA"},
-        "known_sites": {"type": "list", "required": True, "desc": "List of known-sites VCFs"},
     }
     OUTPUTS = {
-        "table": {"type": "path", "required": False, "desc": "BQSR table"},
-        "dir": {"type": "dir", "required": False, "desc": "Output dir"},
+        "table": {"type": "path", "required": False, "desc": "BQSR table"}
     }
     DEFAULTS: Dict[str, Any] = {
         "gatk_bin": "gatk",
+        "known_snp": "gatk",
+        "known_indel1": "gatk",
+        "known_indel2": "gatk",
         "image": "/storage/images/gatk-4.4.0.0.sif",
         "binds": ["/storage", "/data"],
         "singularity_bin": "singularity",
@@ -35,10 +35,14 @@ class GatkBaseRecalibratorTask(Task):
     }
 
     def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id: Optional[str]=None) -> List[Sequence[str] | str]:
-        bam = inputs["bam"]; ref = inputs["reference"]; ks = inputs["known_sites"]
-        if not isinstance(ks, (list, tuple)) or len(ks) == 0:
-            raise ValueError("[gatk.baserecalibrator] inputs.known_sites must be a non-empty list")
-
+        bam = inputs["bam"]
+        ref = params["reference"]
+        
+        ks_list = [
+            params["known_snp"],
+            params["known_indel1"],
+            params["known_indel2"],
+        ]
         out_dir = ensure_dir(outputs.get("dir") or workdir)
         base = sample_id or os.path.splitext(os.path.basename(bam))[0]
         out_tbl = outputs.get("table") or os.path.join(out_dir, f"{base}.recal.table.txt")
@@ -54,7 +58,7 @@ class GatkBaseRecalibratorTask(Task):
             "--reference", ref,
             "--output", out_tbl,
         ]
-        for vcf in ks:
+        for vcf in ks_list:
             argv += ["--known-sites", str(vcf)]
 
         image = params.get("image")

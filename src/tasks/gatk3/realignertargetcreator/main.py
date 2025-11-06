@@ -37,8 +37,9 @@ class Gatk3RealignerTargetCreatorTask(Task):
     }
 
     def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id: Optional[str]=None) -> List[Sequence[str] | str]:
-        bam = inputs["bam"]; ref = inputs["reference"]
-        k1 = inputs["known_indel1"]; k2 = inputs["known_indel2"]
+        bam = inputs["bam"]
+        ref = params["reference"]
+        k1 = params["known_indel1"]; k2 = params["known_indel2"]
         out_dir = ensure_dir(outputs.get("dir") or workdir)
         base = sample_id or os.path.splitext(os.path.basename(bam))[0]
         intervals = outputs.get("intervals") or os.path.join(out_dir, f"{base}.realign.target.intervals")

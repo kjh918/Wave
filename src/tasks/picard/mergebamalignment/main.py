@@ -12,79 +12,70 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
-@register_task("picard.mergebamalignment")
-class PicardMergeBamAlignmentTask(Task):
+@register_task("gatk4.haplotypecaller")
+class GatkHaplotypeCallerTask(Task):
     """
-    Picard MergeBamAlignment Task
+    Gatk HaplotypeCallerTask Task
 
     Example:
-        java -XX:ParallelGCThreads=14 -Xmx16384m -jar /storage/apps/bin/picard.jar MergeBamAlignment \
-            --UNMAPPED_BAM ${BamDir}/${SeqID}.fastqtosam.bam \
-            --ALIGNED_BAM ${BamDir}/${SeqID}.bwa.mem.sam \
-            --REFERENCE_SEQUENCE ${ReferenceFasta} \
-            --OUTPUT ${BamDir}/${SeqID}.primary.bam \
-            --CREATE_INDEX true --MAX_INSERTIONS_OR_DELETIONS -1 \
-            --CLIP_ADAPTERS false --PRIMARY_ALIGNMENT_STRATEGY MostDistant \
-            --ATTRIBUTES_TO_RETAIN XS \
-            --EXPECTED_ORIENTATIONS FR --EXPECTED_ORIENTATIONS RF
+        gatk -XX:ParallelGCThreads=14 -Xmx16384m -jar HaplotypeCaller \
+            -R $ReferenceGenome \
+            -I ${BamDir}/${SeqID}.bwa.mem.sam \
+            -L ${region} \
+            -O $df  \
+            -ERC GVCF
+            -stand-call-conf 30
+            -plodiy 2
     """
 
-    TYPE = "picard.mergebamalignment"
+    TYPE = "gatk4.haplotypecaller"
 
     INPUTS = {
-        "unmapped_bam": {"type": "path", "required": True, "desc": "UNMAPPED_BAM"},
-        "aligned_bam": {"type": "path", "required": True, "desc": "ALIGNED_BAM (SAM from BWA MEM)"},
+        "bam": {"type": "path", "required": True, "desc": "BAM"},
         "reference": {"type": "path", "required": True, "desc": "REFERENCE FASTA"},
+        "known_snp": {"type": "path", "required": True, "desc": "KNOWN VCF"},
     }
     OUTPUTS = {
-        "bam": {"type": "path", "required": False, "desc": "Merged BAM"},
-        "dir": {"type": "dir", "required": False, "desc": "Output directory"},
+        "gvcf": {"type": "path", "required": False, "desc": "gvcf"},
     }
 
     DEFAULTS = {
-        "java_bin": "java",
-        "jar": "/storage/apps/bin/picard.jar",
+        "gatk_bin": "gatk",
         "xmx_gb": 16,
-        "parallel_gc_threads": 14,
-        "create_index": True,
-        "max_indel": -1,
-        "clip_adapters": False,
-        "primary_strategy": "MostDistant",
-        "retain_attributes": ["XS"],
-        "expected_orientations": ["FR", "RF"],
-        "image": None,
-        "binds": None,
+        "parallel_gc_threads": 4,
+        "gender": 'UNKNOWN'
+        "tmp_dir": 'tmp'
         "singularity_bin": "singularity",
     }
 
     def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id=None) -> List[Sequence[str] | str]:
-        unmapped = inputs["unmapped_bam"]
-        aligned = inputs["aligned_bam"]
+        bam = inputs["bam"]
         ref = inputs["reference"]
+        gvcf = outputs["aligned_bam"]
 
-        out_dir = ensure_dir(outputs.get("dir") or workdir)
-        out_bam = outputs.get("bam") or os.path.join(out_dir, f"{sample_id}.primary.bam")
+        out_dir = ensure_dir(workdir)
+        out_bam = outputs.get("gvcf") or os.path.join(out_dir, f"{sample_id}.gvcf.gz")
 
         cmd = [
-            str(params.get("java_bin", "java")),
-            f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 14)}",
+            str(params.get("gatk_bin", "gatk")),
+            f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 4)}",
             f"-Xmx{params.get('xmx_gb', 16)}g",
-            "-jar", str(params.get("jar", "/storage/apps/bin/picard.jar")),
-            "MergeBamAlignment",
-            "--UNMAPPED_BAM", unmapped,
-            "--ALIGNED_BAM", aligned,
-            "--REFERENCE_SEQUENCE", ref,
-            "--OUTPUT", out_bam,
-            "--CREATE_INDEX", str(params.get("create_index", True)).lower(),
-            "--MAX_INSERTIONS_OR_DELETIONS", str(params.get("max_indel", -1)),
-            "--CLIP_ADAPTERS", str(params.get("clip_adapters", False)).lower(),
-            "--PRIMARY_ALIGNMENT_STRATEGY", params.get("primary_strategy", "MostDistant"),
+            "HaplotypeCaller ",
+            f'-R {ref} -I {bam} '
+            f'-stand-call-conf 30 --dbsnp {dbsnp_vcf} '
+            f'-O {out_gvcf} -ERC GVCF'
         ]
-        for a in params.get("retain_attributes", ["XS"]):
-            cmd += ["--ATTRIBUTES_TO_RETAIN", a]
-        for eo in params.get("expected_orientations", ["FR", "RF"]):
-            cmd += ["--EXPECTED_ORIENTATIONS", eo]
 
+        if params['region'].startswith('ch'):
+            if params['region'] == 'chrX':
+                if params['gender'].upper() == 'MALE':
+                    cmd += ['-ploidy 1', '-L chrX']
+            elif params['region'] in ['chrY','chrM']:
+                cmd += ['-ploidy 1', f'-L {params['region']}']
+            else:
+                cmd += [f'-L {params['region']}']
+        
+        
         image = params.get("image")
         if image:
             cmd_line = singularity_exec_cmd(

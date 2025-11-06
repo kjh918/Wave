@@ -3,11 +3,16 @@ from typing import Dict, Any, List, Sequence
 from pathlib import Path
 import os, shlex
 
-from src.tasks.task import Task, TaskRegistry
-from src.tasks.util import ensure_dir, normalize_binds, singularity_exec_cmd, to_sh_from_builder
+from src.tasks.task import Task
+from src.tasks.task_registry import register_task
+from src.tasks.utils import (
+    ensure_dir,
+    normalize_binds,
+    singularity_exec_cmd,
+    to_sh_from_builder,
+)
 
-
-@TaskRegistry.register
+@register_task("bwa.mem")
 class BwaMemTask(Task):
     """
     BWA MEM alignment task (Singularity supported)
@@ -15,20 +20,19 @@ class BwaMemTask(Task):
     Runs:
       singularity exec -B /storage,/data /storage/images/bwa-0.7.17.sif \
           bwa mem -M -t {threads} -Y -L 50,50 \
-          -R "@RG\\tID:{RG_ID}\\tPL:{PL}\\tLB:{LB}\\tSM:{SM}\\tCN:{CN}" {BwaIndex} \
-          {TrimFastqDir}/{SeqID}.trimmed_R1.fastq.gz {TrimFastqDir}/{SeqID}.trimmed_R2.fastq.gz \
+          -R "@RG\\tID:{read_group_id}\\tPL:{PL}\\tLB:{LB}\\tSM:{SM}\\tCN:{CN}" {reference_genome} \
+          {TrimFastqDir}/{SeqID}.trimmed_read1.fastq.gz {TrimFastqDir}/{SeqID}.trimmed_read2.fastq.gz \
           > {BamDir}/{SeqID}.bwa.mem.sam
     """
 
     TYPE = "bwa.mem"
 
     INPUTS = {
-        "r1": {"type": "path", "required": True, "desc": "Trimmed R1 FASTQ"},
-        "r2": {"type": "path", "required": True, "desc": "Trimmed R2 FASTQ"},
+        "read1": {"type": "path", "required": True, "desc": "Trimmed read1 FASTQ"},
+        "read2": {"type": "path", "required": True, "desc": "Trimmed read2 FASTQ"},
     }
     OUTPUTS = {
         "sam": {"type": "path", "required": False, "desc": "Output SAM file"},
-        "dir": {"type": "dir", "required": False, "desc": "Work/output directory"},
     }
 
     DEFAULTS: Dict[str, Any] = {
@@ -37,21 +41,20 @@ class BwaMemTask(Task):
         "binds": ["/storage", "/data"],
         "singularity_bin": "singularity",
         "bwa_bin": "bwa",
-        "index": None,
-        "rg_id": None,
-        "rg_pl": "ILLUMINA",
-        "rg_lb": None,
-        "rg_sm": None,
-        "rg_cn": None,
+        "reference_genome": None,
+        "read_group_id": None,
+        "platform": "ILLUMINA",
+        "library_name": None,
+        "sample_id": None,
+        "center": None,
     }
 
     def _build_cmd(
-        self, *, inputs: Dict[str, Any], outputs: Dict[str, Any], params: Dict[str, Any],
-        threads: int, workdir: str, sample_id: str | None = None
-    ) -> List[Sequence[str] | str]:
-        r1 = inputs.get("r1")
-        r2 = inputs.get("r2")
-        out_dir = ensure_dir(outputs.get("dir") or workdir)
+            self, *, inputs: Dict[str, Any], outputs: Dict[str, Any], params: Dict[str, Any],
+            threads: int, workdir: str, sample_id: str | None = None
+        ) -> List[Sequence[str] | str]:
+        read1 = inputs.get("read1")
+        read2 = inputs.get("read2")
         sam_out = outputs.get("sam") or os.path.join(out_dir, f"{sample_id}.bwa.mem.sam")
 
         image = params.get("image")
@@ -63,19 +66,19 @@ class BwaMemTask(Task):
             raise ValueError("BWA index path (--PARAMS.index) is required")
 
         rg_line = (
-            f"@RG\\tID:{params.get('rg_id', sample_id)}"
-            f"\\tPL:{params.get('rg_pl', 'ILLUMINA')}"
-            f"\\tLB:{params.get('rg_lb', sample_id)}"
-            f"\\tSM:{params.get('rg_sm', sample_id)}"
-            f"\\tCN:{params.get('rg_cn', 'CENTER')}"
+            f"@RG\\tID:{params.get('read_group_id', sample_id)}"
+            f"\\tPL:{params.get('platform', 'ILLUMINA')}"
+            f"\\tLB:{params.get('library_name', sample_id)}"
+            f"\\tSM:{params.get('sample_id', sample_id)}"
+            f"\\tCN:{params.get('center', 'CENTER')}"
         )
 
         core = [
             bwa_bin, "mem", "-M",
             "-t", str(threads),
-            "-Y", "-L", "50,50",
+            "-Y", "-L", f'{params.get("read_length")},{params.get("read_length")}',
             "-R", rg_line,
-            index, str(r1), str(r2)
+            index, str(read1), str(read2)
         ]
 
         redirect = f"> {sam_out}"

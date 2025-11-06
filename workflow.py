@@ -120,15 +120,15 @@ class Workflow:
             raise ValueError("Workflow: either config_path or config_dict must be provided.")
 
         # 2) 기본 설정
-        w_params = self.cfg["WORK_PARAMETERS"]
-        self.input_tpl = w_params["input_path"]
-        self.work_dir = Path(w_params["work_dir_path"]).resolve()
+        self.w_params = self.cfg["WORK_PARAMETERS"]
+        self.input_tpl = self.w_params["input_path"]
+        self.work_dir = Path(self.w_params["work_dir_path"]).resolve()
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
         # 3) 스켈레톤
         self.workflow = {
             "SETTING": self.cfg.get("SETTING", {}),
-            "WORK_PARAMETERS": w_params,
+            "WORK_PARAMETERS": self.w_params,
             "SAMPLES": {},             # sample_id -> {...}
         }
 
@@ -182,7 +182,11 @@ class Workflow:
         setted_inputs = {}
         for key, value in inputs.items():
             value = str(value)
-            setted_inputs[key] = value.replace('{work_dir_path}', str(self.work_dir)).replace('{sample_id}', sample_id).replace('{WORK_DIR}', str(task_work_dir))
+
+            for w_key, w_value in self.w_params.items():
+                value = value.replace('{' + str(w_key) + '}',w_value).replace('{sample_id}', sample_id).replace('{WORK_DIR}', str(task_work_dir))
+                setted_inputs[key] = value
+
         return setted_inputs
     
     def _normalize_tasklist_legacy(self, task_list_raw: Any, sample_id: str) -> List[Dict[str, Any]]:

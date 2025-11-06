@@ -37,8 +37,8 @@ class Gatk3IndelRealignerTask(Task):
     }
 
     def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id: Optional[str]=None) -> List[Sequence[str] | str]:
-        bam = inputs["bam"]; ref = inputs["reference"]; intervals = inputs["intervals"]
-        k1 = inputs["known_indel1"]; k2 = inputs["known_indel2"]
+        bam = inputs["bam"]; ref = params["reference"]; intervals = inputs["intervals"]
+        k1 = params["known_indel1"]; k2 = params["known_indel2"]
         out_dir = ensure_dir(outputs.get("dir") or workdir)
         base = sample_id or os.path.splitext(os.path.basename(bam))[0]
         out_bam = outputs.get("bam") or os.path.join(out_dir, f"{base}.sorted.dedup.realign.bam")
