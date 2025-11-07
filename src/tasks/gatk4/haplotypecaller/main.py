@@ -1,8 +1,7 @@
-# src/tasks/gatk/applybqsr/main.py
 from __future__ import annotations
-from typing import Dict, Any, List, Sequence, Optional
+from typing import Dict, Any, List, Sequence
+from pathlib import Path
 import os, shlex
-
 
 from src.tasks.task import Task
 from src.tasks.task_registry import register_task
@@ -13,65 +12,92 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
-@register_task("gatk4.applybqsr")
-class GatkApplyBQSRTask(Task):
-    TYPE = "gatk4.applybqsr"
+@register_task("gatk4.haplotypecaller")
+class GatkHaplotypeCallerTask(Task):
+    """
+    Gatk HaplotypeCallerTask Task
+
+    Example:
+        gatk -XX:ParallelGCThreads=14 -Xmx16384m -jar HaplotypeCaller \
+            -R $ReferenceGenome \
+            -I ${BamDir}/${SeqID}.bwa.mem.sam \
+            -L ${region} \
+            -O $df  \
+            -ERC GVCF
+            -stand-call-conf 30
+            -plodiy 2
+    """
+
+    TYPE = "gatk4.haplotypecaller"
 
     INPUTS = {
-        "bam": {"type": "path", "required": True, "desc": "BAM (post-dedup or realigned)"},
-        "bqsr_table": {"type": "path", "required": True, "desc": "BQSR table"},
+        "bam": {"type": "path", "required": True, "desc": "BAM"},
+        "reference": {"type": "path", "required": True, "desc": "REFERENCE FASTA"},
+        "known_snp": {"type": "path", "required": True, "desc": "KNOWN VCF"},
     }
     OUTPUTS = {
-        "bam": {"type": "path", "required": False, "desc": "Recalibrated BAM"},
+        "gvcf": {"type": "path", "required": False, "desc": "gvcf"},
     }
-    DEFAULTS: Dict[str, Any] = {
+
+    DEFAULTS = {
         "gatk_bin": "gatk",
-        "image": "/storage/images/gatk-4.4.0.0.sif",
-        "binds": ["/storage", "/data"],
-        "singularity_bin": "singularity",
-        "parallel_gc_threads": 14,
         "xmx_gb": 16,
+        "parallel_gc_threads": 4,
+        "gender": 'UNKNOWN',
+        "tmp_dir": 'tmp',
+        "singularity_bin": "singularity",
     }
 
-    def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id: Optional[str]=None) -> List[Sequence[str] | str]:
-        bam = inputs["bam"]; table = inputs["bqsr_table"]
-        out_dir = ensure_dir(outputs.get("dir") or workdir)
-        base = sample_id or os.path.splitext(os.path.basename(bam))[0]
-        out_bam = outputs.get("bam") or os.path.join(out_dir, f"{base}.recal.bam")
+    def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id=None) -> List[Sequence[str] | str]:
+        bam = inputs["bam"]
+        ref = inputs["reference"]
+        gvcf = outputs["aligned_bam"]
 
-        gatk_bin = str(params.get("gatk_bin", "gatk"))
-        xmx = int(params.get("xmx_gb", 16))
-        pgc = int(params.get("parallel_gc_threads", 14))
+        out_dir = ensure_dir(workdir)
+        out_bam = outputs.get("gvcf") or os.path.join(out_dir, f"{sample_id}.gvcf.gz")
 
-        argv = [
-            gatk_bin, "ApplyBQSR",
-            "--java-options", f"-XX:ParallelGCThreads={pgc} -Xmx{xmx}g",
-            "--input", bam,
-            "--bqsr-recal-file", table,
-            "--output", out_bam,
+        cmd = [
+            str(params.get("gatk_bin", "gatk")),
+            f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 4)}",
+            f"-Xmx{params.get('xmx_gb', 16)}g",
+            "HaplotypeCaller ",
+            f'-R {ref} -I {bam} '
+            f'-stand-call-conf 30 --dbsnp {dbsnp_vcf} '
+            f'-O {out_gvcf} -ERC GVCF'
         ]
 
+        if params['region'].startswith('ch'):
+            if params['region'] == 'chrX':
+                if params['gender'].upper() == 'MALE':
+                    cmd += ['-ploidy 1', '-L chrX']
+            elif params['region'] in ['chrY','chrM']:
+                cmd += ['-ploidy 1', f'-L {params['region']}']
+            else:
+                cmd += [f'-L {params['region']}']
+        
+        
         image = params.get("image")
         if image:
-            cmd = singularity_exec_cmd(
-                image=str(image),
-                argv=argv,
+            cmd_line = singularity_exec_cmd(
+                image=image,
+                argv=cmd,
                 binds=normalize_binds(params.get("binds")),
-                singularity_bin=str(params.get("singularity_bin", "singularity")),
+                singularity_bin=params.get("singularity_bin", "singularity"),
             )
-            return [" ".join(map(shlex.quote, cmd))]
         else:
-            return [" ".join(map(shlex.quote, argv))]
+            cmd_line = " ".join(map(shlex.quote, cmd))
+
+        return [cmd_line]
 
     def to_sh(self) -> List[str]:
         p = {**self.DEFAULTS, **(self.params or {})}
         return to_sh_from_builder(
             builder=self._build_cmd,
-            inputs=self.inputs or {},
-            outputs=self.outputs or {"dir": str(self.workdir)},
+            inputs=self.inputs,
+            outputs=self.outputs,
             params=p,
-            threads=int(self.threads or 1),
+            threads=1,
             workdir=str(self.workdir),
-            sample_id=self.params.get("sample_id"),
+            sample_id=self.params.get("sample_id") or None,
             ensure_output_dir_key="dir",
         )

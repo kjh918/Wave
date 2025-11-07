@@ -112,6 +112,7 @@ TASK_LIST:
   - Picard_MergeBamAlignment:
       TOOL: picard
       FUNC: mergebamalignment
+      THREADS: 14
       WORK_DIR: "{work_dir_path}/{sample_id}/05_MergeBam_Picard"
       INPUT:
         unmapped_bam: "{work_dir_path}/{sample_id}/03_Unalign_FastqToSam_Picard/{sample_id}.fastqtosam.bam"
@@ -119,6 +120,12 @@ TASK_LIST:
         reference:    "{reference_genome}"
       OUTPUT:
         bam: "{WORK_DIR}/{sample_id}.primary.bam"
+      PARAMS:
+        xmx_gb: 16
+        parallel_gc_threads: 14
+        primary_strategy: MostDistant
+        create_index: True
+
 
   - Samtools_Sort:
       TOOL: samtools

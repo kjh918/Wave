@@ -1,6 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Sequence
-from pathlib import Path
+from typing import Dict, Any, List, Sequence, Optional
 import os, shlex
 
 from src.tasks.task import Task
@@ -12,92 +11,139 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
-@register_task("gatk4.haplotypecaller")
-class GatkHaplotypeCallerTask(Task):
+
+@register_task("picard.mergebamalignment")
+class PicardMergeBamAlignmentTask(Task):
     """
-    Gatk HaplotypeCallerTask Task
+    Picard MergeBamAlignment 실행 태스크
 
-    Example:
-        gatk -XX:ParallelGCThreads=14 -Xmx16384m -jar HaplotypeCaller \
-            -R $ReferenceGenome \
-            -I ${BamDir}/${SeqID}.bwa.mem.sam \
-            -L ${region} \
-            -O $df  \
-            -ERC GVCF
-            -stand-call-conf 30
-            -plodiy 2
+    INPUTS:
+      unmapped_bam: FastqToSam 결과 BAM
+      aligned_bam:  BWA-MEM SAM/BAM (동일 sample)
+      reference:    Reference FASTA
+
+    OUTPUTS:
+      bam:          결과 primary BAM (default: {workdir}/{sample_id}.primary.bam)
+      dir:          결과 디렉토리 (optional)
+
+    PARAMS:
+      create_index: bool (default: True)
+      max_indels:   int  (default: -1)
+      clip_adapters: bool (default: False)
+      primary_strategy: str ("MostDistant" 기본)
+      retain_attr:  list[str] (default: ["XS"])
+      expected_orientations: list[str] (default: ["FR", "RF"])
+      java_bin:     str ("java")
+      jar:          str ("/storage/apps/bin/picard.jar")
+      xmx_gb:       int (16)
+      parallel_gc_threads: int (14)
+      image:        str | None
+      binds:        list[str] | str | None
+      singularity_bin: str ("singularity")
     """
 
-    TYPE = "gatk4.haplotypecaller"
+    TYPE = "picard.mergebamalignment"
 
-    INPUTS = {
-        "bam": {"type": "path", "required": True, "desc": "BAM"},
-        "reference": {"type": "path", "required": True, "desc": "REFERENCE FASTA"},
-        "known_snp": {"type": "path", "required": True, "desc": "KNOWN VCF"},
-    }
-    OUTPUTS = {
-        "gvcf": {"type": "path", "required": False, "desc": "gvcf"},
+    INPUTS: Dict[str, Any] = {
+        "unmapped_bam": {"type": "path", "required": True, "desc": "FastqToSam output BAM"},
+        "aligned_bam":  {"type": "path", "required": True, "desc": "BWA MEM SAM/BAM"},
+        "reference":    {"type": "path", "required": True, "desc": "Reference FASTA"},
     }
 
-    DEFAULTS = {
-        "gatk_bin": "gatk",
+    OUTPUTS: Dict[str, Any] = {
+        "bam": {"type": "path", "required": False, "desc": "Output primary BAM"},
+    }
+
+    DEFAULTS: Dict[str, Any] = {
+        "create_index": True,
+        "max_indels": -1,
+        "clip_adapters": False,
+        "primary_strategy": "MostDistant",
+        "retain_attr": ["XS"],
+        "expected_orientations": ["FR", "RF"],
+        "java_bin": "java",
+        "jar": "/storage/apps/bin/picard.jar",
         "xmx_gb": 16,
-        "parallel_gc_threads": 4,
-        "gender": 'UNKNOWN'
-        "tmp_dir": 'tmp'
+        "parallel_gc_threads": 14,
+        "image": "/storage/images/gatk-4.4.0.0.sif",
+        "binds": ["/storage", "/data"],
         "singularity_bin": "singularity",
     }
 
-    def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id=None) -> List[Sequence[str] | str]:
-        bam = inputs["bam"]
-        ref = inputs["reference"]
-        gvcf = outputs["aligned_bam"]
+    # ---- 내부 빌더
+    def _build_cmd(
+            self,
+            *,
+            inputs: Dict[str, Any],
+            outputs: Dict[str, Any],
+            params: Dict[str, Any],
+            threads: int,
+            workdir: str,
+            sample_id: Optional[str] = None,
+        ) -> List[Sequence[str] | str]:
 
-        out_dir = ensure_dir(workdir)
-        out_bam = outputs.get("gvcf") or os.path.join(out_dir, f"{sample_id}.gvcf.gz")
+        unmapped_bam = inputs.get("unmapped_bam")
+        aligned_bam  = inputs.get("aligned_bam")
+        reference    = inputs.get("reference")
+        if not all([unmapped_bam, aligned_bam, reference]):
+            raise ValueError("[picard.mergebamalignment] Missing required inputs")
 
-        cmd = [
-            str(params.get("gatk_bin", "gatk")),
-            f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 4)}",
-            f"-Xmx{params.get('xmx_gb', 16)}g",
-            "HaplotypeCaller ",
-            f'-R {ref} -I {bam} '
-            f'-stand-call-conf 30 --dbsnp {dbsnp_vcf} '
-            f'-O {out_gvcf} -ERC GVCF'
+        out_dir = ensure_dir(outputs.get("dir") or workdir)
+        out_bam = outputs.get("bam") or os.path.join(out_dir, f"{sample_id or 'sample'}.primary.bam")
+
+        java_bin = str(params.get("java_bin", "java"))
+        jar_path = str(params.get("jar", "/storage/apps/bin/picard.jar"))
+        xmx_gb = int(params.get("xmx_gb", 16))
+        pgc = int(params.get("parallel_gc_threads", 14))
+
+        # core Picard arguments
+        argv = [
+            java_bin,
+            f"-XX:ParallelGCThreads={pgc}",
+            f"-Xmx{xmx_gb}g",
+            "-jar", jar_path,
+            "MergeBamAlignment",
+            "--UNMAPPED_BAM", unmapped_bam,
+            "--ALIGNED_BAM", aligned_bam,
+            "--REFERENCE_SEQUENCE", reference,
+            "--OUTPUT", out_bam,
+            "--CREATE_INDEX", str(params.get("create_index", True)).lower(),
+            "--MAX_INSERTIONS_OR_DELETIONS", str(params.get("max_indels", -1)),
+            "--CLIP_ADAPTERS", str(params.get("clip_adapters", False)).lower(),
+            "--PRIMARY_ALIGNMENT_STRATEGY", str(params.get("primary_strategy", "MostDistant")),
         ]
 
-        if params['region'].startswith('ch'):
-            if params['region'] == 'chrX':
-                if params['gender'].upper() == 'MALE':
-                    cmd += ['-ploidy 1', '-L chrX']
-            elif params['region'] in ['chrY','chrM']:
-                cmd += ['-ploidy 1', f'-L {params['region']}']
-            else:
-                cmd += [f'-L {params['region']}']
-        
-        
+        # optional list-like parameters
+        retain_attr = params.get("retain_attr", ["XS"])
+        expected_orient = params.get("expected_orientations", ["FR", "RF"])
+        for a in retain_attr:
+            argv += ["--ATTRIBUTES_TO_RETAIN", str(a)]
+        for o in expected_orient:
+            argv += ["--EXPECTED_ORIENTATIONS", str(o)]
+
+        # 컨테이너 래핑
         image = params.get("image")
         if image:
-            cmd_line = singularity_exec_cmd(
-                image=image,
-                argv=cmd,
+            cmd = singularity_exec_cmd(
+                image=str(image),
+                argv=argv,
                 binds=normalize_binds(params.get("binds")),
-                singularity_bin=params.get("singularity_bin", "singularity"),
+                singularity_bin=str(params.get("singularity_bin", "singularity")),
             )
+            return [" ".join(map(shlex.quote, cmd))]
         else:
-            cmd_line = " ".join(map(shlex.quote, cmd))
+            return [" ".join(map(shlex.quote, argv))]
 
-        return [cmd_line]
-
+    # ---- 메인 실행용 to_sh
     def to_sh(self) -> List[str]:
         p = {**self.DEFAULTS, **(self.params or {})}
         return to_sh_from_builder(
             builder=self._build_cmd,
-            inputs=self.inputs,
-            outputs=self.outputs,
+            inputs=self.inputs or {},
+            outputs=self.outputs or {"dir": str(self.workdir)},
             params=p,
-            threads=1,
+            threads=int(self.threads or 1),
             workdir=str(self.workdir),
-            sample_id=self.params.get("sample_id") or None,
+            sample_id=self.params.get("sample_id"),
             ensure_output_dir_key="dir",
         )
