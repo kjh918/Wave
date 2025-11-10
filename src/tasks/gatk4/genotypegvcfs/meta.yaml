@@ -1,0 +1,50 @@
+name: gatk.applybqsr
+version: "4.4.0.0"
+description: "Apply base quality score recalibration using GATK4 ApplyBQSR."
+
+schema:
+  inputs:
+    bam:
+      type: path
+      required: true
+      description: "Input BAM (dedup or realigned)"
+    bqsr_table:
+      type: path
+      required: true
+      description: "BQSR table produced by BaseRecalibrator"
+
+  outputs:
+    dir:
+      type: dir
+      required: false
+      description: "Output directory (defaults to workdir)"
+    bam:
+      type: path
+      required: false
+      description: "Recalibrated BAM (auto-generated if omitted)"
+
+  params:
+    gatk_bin:
+      type: string
+      default: "gatk"
+      description: "GATK executable"
+    image:
+      type: path|null
+      default: "/storage/images/gatk-4.4.0.0.sif"
+      description: "Singularity image path; null to use local binary"
+    binds:
+      type: list|string|null
+      default: ["/storage", "/data"]
+      description: "Bind mounts for Singularity"
+    singularity_bin:
+      type: string
+      default: "singularity"
+      description: "Singularity executable"
+    parallel_gc_threads:
+      type: int
+      default: 14
+      description: "Java Parallel GC threads"
+    xmx_gb:
+      type: int
+      default: 16
+      description: "Java heap in GB"

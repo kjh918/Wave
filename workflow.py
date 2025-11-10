@@ -210,9 +210,6 @@ class Workflow:
 
             name, spec = next(iter(item.items()))
 
-            # task_dir_name = spec.get("WORK_DIR")
-            # print(task_dir_name)
-            # exit()
             ttype = spec.get("TOOL")
             func = spec.get("FUNC")
             threads = spec.get("THREADS") or 1
@@ -270,55 +267,12 @@ class Workflow:
 
             # 마스터 스크립트
             master_json = sid_root / f"workflow_{sid}.json"
-            
-
-            for _task in tasks_norm:
-                tdir = _task['workdir']
-                tdir.mkdir(parents=True, exist_ok=True)
-                TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
-
-
-                task = _instantiate_task(
-                    TaskCls,
-                    name = _task["name"],
-                    tool = _task["tool"],
-                    func = _task["func"],
-                    threads = _task["threads"],
-                    workdir = tdir,
-                    inputs = _task.get("inputs", {}),
-                    outputs = _task.get("outputs", {}),
-                    params = _task.get("params", {}),
-                )
-
-                task_cmd = list(self._to_shell_lines(task.to_sh()))
-                print(task_cmd)
-                # exit()
-                # executor = SunGridExecutor(
-                #     logdir = _task['workdir'] / 'qlog'
-                #     )
-                # # print(task_cmd)
-                # # exit()
-                # executor.run(
-                #     node=self.workflow['SETTING']['Node'], 
-                #     cmd=task_cmd[0], 
-                #     threads = _task.get("params", {})['threads'],
-                #     job_id = f'{sid}_{_task["name"]}'
-                #     )
-                # print(tdir)
-            # with open(master_json, "w") as json_file:
-            #     json.dump(student_data, json_file)
-
-
-
-            master_sh = sid_root / f"workflow_{sid}.sh"
-            with master_sh.open("w") as mf:
-                mf.write("#!/usr/bin/env bash\nset -euo pipefail\n")
-                for idx, t in enumerate(tasks_norm, 1):
-                    tdir = t['workdir']
+            total_task_dict = {}
+            with open(master_json, 'w') as handle:
+                for _task in tasks_norm:
+                    tdir = _task['workdir']
                     tdir.mkdir(parents=True, exist_ok=True)
-                    # Task 인스턴스 생성
                     TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
-
 
                     task = _instantiate_task(
                         TaskCls,
@@ -331,28 +285,34 @@ class Workflow:
                         outputs = _task.get("outputs", {}),
                         params = _task.get("params", {}),
                     )
-                    # 커맨드 라인 생성
-                    lines = list(self._to_shell_lines(task.to_sh()))
 
-                    # task.sh 저장
-                    t_sh = tdir / f"{sid}_{t['name']}.sh"
-                    t_sh.write_text("#!/usr/bin/env bash\nset -euo pipefail\n" + "\n".join(lines) + "\n")
-                    t_sh.chmod(0o755)
-
-                    # 마스터에 실행 라인 추가
-                    mf.write(f"bash {t_sh.as_posix()}\n")
-
-            master_sh.chmod(0o755)
-            masters[sid] = master_sh
+                    task_cmd = list(self._to_shell_lines(task.to_sh()))
+                    total_task_dict[task.name] = {
+                        'user': self.workflow['SETTING']['User'],
+                        'node': self.workflow['SETTING']['Node'],
+                        'job_id': task.name,
+                        'threads': task.threads,
+                        'cmd': task_cmd[0]
+                    }
+                json.dump(total_task_dict, handle,indent=4)
+                masters[sid] = master_json
 
         return {"samples": samples, "masters": masters}
 
     # --------------------------
     # 실행
     # --------------------------
-    def run(self, run: bool = False):
+    def run(self, run: bool = False, sge=True):
         plan = self.build()
         masters = plan.get("masters", {})
+        
+        if sge:
+
+            for sid, json_file in master.items():
+                with open(json_file, 'r') as handle:
+                    json_data = json.load(handle)
+                
+
         if not run:
             print("[WAVE] Dry-run: generated scripts")
             for sid, sh in masters.items():
@@ -393,72 +353,7 @@ class Workflow:
 
         # 3) 다시 레지스트리 조회
         return TaskRegistry.get(key)
-    # def _resolve_task_class(self, tool: str, func: Optional[str] = None):
-    #     tool = (tool or "").strip().lower()
-    #     func = (func or "").strip().lower() if func else None
-
-    #     # ---- 1) 레지스트리 즉시 조회
-    #     if func:
-    #         key = f"{tool}.{func}.main"
-    #         try:
-    #             return TaskRegistry.get(key)
-    #         except KeyError:
-    #             pass
-    #         # 2-a) 다기능 모듈 임포트: src.tasks.<tool>.<func>.main → 재조회
-    #         for mod in (f"src.tasks.{tool}.{func}.main", f"src.tasks.{tool}.main"):
-    #             try:
-    #                 importlib.import_module(mod)
-    #                 break
-    #             except ModuleNotFoundError:
-    #                 continue
-    #         return TaskRegistry.get(key)  # 없으면 여기서 KeyError
-
-    #     else:
-    #         # 단일 기능: 'tool' → 'tool.run'
-    #         for key in (tool, f"{tool}.run"):
-    #             try:
-    #                 return TaskRegistry.get(key)
-    #             except KeyError:
-    #                 pass
-    #         # 2-b) 단일 기능 모듈 임포트: src.tasks.<tool>.main → 재조회
-    #         for mod in (f"src.tasks.{tool}.main", f"src.tasks.{tool}"):
-    #             try:
-    #                 importlib.import_module(mod)
-    #                 break
-    #             except ModuleNotFoundError:
-    #                 continue
-    #         for key in (tool, f"{tool}.run"):
-    #             try:
-    #                 return TaskRegistry.get(key)
-    #             except KeyError:
-    #                 continue
-    #         raise KeyError(f"Task not found for tool='{tool}'")
-    # def _resolve_task_class(self, type_name: str, func_name: bool):
-    #     if str(func_name) == 'None':
-    #         try:
-    #             return TaskRegistry.get(f'{type_name}.run')
-    #         except Exception:
-    #             # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
-    #             try:
-    #                 print(f"src.tasks.{type_name}.main")
-    #                 importlib.import_module(f"src.tasks.{type_name}.main")
-    #                 importlib.import_module(f"src.tasks.{type_name}.run")
-    #             except ModuleNotFoundError:
-    #                 pass
-    #             # 재시도 (여전히 없으면 KeyError 발생)
-    #             return TaskRegistry.get(type_name)
-    #     else:
-    #         try:
-    #             return TaskRegistry.get(type_name)
-    #         except Exception:
-    #             # 컨벤션: src.tasks.<type>.<type> 모듈 임포트 시도
-    #             try:
-    #                 print(f"src.tasks.{type_name}.{func_name}.main")
-    #                 importlib.import_module(f"src.tasks.{type_name}.{func_name}.main")
-    #             except ModuleNotFoundError:
-    #                 pass
-    #             # 재시도 (여전히 없으면 KeyError 발생)
-    #             return TaskRegistry.get(type_name)
+        
 
     def _to_shell_lines(self, lines: Iterable[str]) -> Iterable[str]:
         """

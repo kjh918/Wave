@@ -97,8 +97,8 @@ def build_genotypegvcfs_cmd(
         f'-Xmx{java_xmx} -Djava.io.tmpdir={tmp_dir}" '
         f'GenotypeGVCFs --include-non-variant-sites false -R {ref_fasta} -V {input_gvcf} -O {out_vcf}'
     )
-
     return cmd
+
 def main():
 
     parser = Parser()

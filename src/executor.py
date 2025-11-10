@@ -138,9 +138,11 @@ class SunGridExecutor(Executor):
             time.sleep(60)
         os.remove(qstat_path)
 
-    def run_workflow(task_dict):
+    # def run_workflow(node, tasks_list):
 
-        for key, value in task_dict:
+    #     for _task in tasks_list:
             
-            pass
+    #         self.run(node: , cmd = _task.cmd, threads: int = 1, job_id = '') 
+
+    #         pass
             
