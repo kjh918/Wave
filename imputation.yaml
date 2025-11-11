@@ -1,0 +1,101 @@
+TASK_LIST:
+  - Make_Chunks:
+      TOOL: glimpse2
+      FUNC: chunk
+      WORK_DIR: "{work_dir_path}/{sample_id}/60_chunks"
+      INPUT:
+        reference_fai: "/ref/hg38.fa.fai"
+      OUTPUT:
+        chunks_tsv: "{WORK_DIR}/chunks.tsv"
+      PARAMS:
+        image: "/storage/images/glimpse2.sif"
+        binds: "/storage,/data"
+
+  - GL_Per_Chunk:
+      TOOL: glimpse2
+      FUNC: glchunk
+      WORK_DIR: "{work_dir_path}/{sample_id}/61_gl"
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/05_bam/{sample_id}.recal.bam"
+        reference_fasta: "/ref/hg38.fa"
+        chunks_tsv: "{work_dir_path}/{sample_id}/60_chunks/chunks.tsv"
+        chunk_id: "{chunk_id}"              # 워크플로우에서 반복 전개 시 치환
+      OUTPUT:
+        vcf: "{WORK_DIR}/{chunk_id}.vcf.gz"
+      PARAMS:
+        image: "/storage/images/glimpse2.sif"
+        binds: "/storage,/data"
+        mpileup_opts: ["-a","FORMAT/DP"]
+
+  - Phase_Per_Chunk:
+      TOOL: glimpse2
+      FUNC: phasechunk
+      WORK_DIR: "{work_dir_path}/{sample_id}/62_phased"
+      INPUT:
+        gl_vcf: "{work_dir_path}/{sample_id}/61_gl/{chunk_id}.vcf.gz"
+        panel_vcf: "/ref/panel/hg38.panel.vcf.gz"
+        chunks_tsv: "{work_dir_path}/{sample_id}/60_chunks/chunks.tsv"
+        chunk_id: "{chunk_id}"
+      OUTPUT:
+        phased_vcf: "{WORK_DIR}/{chunk_id}.phased.vcf.gz"
+      PARAMS:
+        threads: 12
+        image: "/storage/images/glimpse2.sif"
+        binds: "/storage,/data"
+
+  - Ligate_Phased:
+      TOOL: glimpse2
+      FUNC: ligate
+      WORK_DIR: "{work_dir_path}/{sample_id}/63_ligate"
+      INPUT:
+        phased_glob: "{work_dir_path}/{sample_id}/62_phased/*.phased.vcf.gz"
+      OUTPUT:
+        output_vcf: "{WORK_DIR}/{sample_id}.phased.ligated.vcf.gz"
+      PARAMS:
+        image: "/storage/images/glimpse2.sif"
+        binds: "/storage,/data"
+- Ligate_Phased:
+    TOOL: glimpse2
+    FUNC: ligate
+    WORK_DIR: "{work_dir_path}/{sample_id}/63_ligate"
+    INPUT:
+      phased_glob: "{work_dir_path}/{sample_id}/62_phased/*.phased.vcf.gz"
+    OUTPUT:
+      output_vcf: "{WORK_DIR}/{sample_id}.ligated.vcf.gz"
+    PARAMS:
+      image: "/storage/images/glimpse2.sif"
+      binds: "/storage,/data"
+
+- Sample_Finalize:
+    TOOL: glimpse2
+    FUNC: sample
+    WORK_DIR: "{work_dir_path}/{sample_id}/64_sample"
+    INPUT:
+      ligated_vcf: "{work_dir_path}/{sample_id}/63_ligate/{sample_id}.ligated.vcf.gz"
+    OUTPUT:
+      vcf: "{WORK_DIR}/{sample_id}.imputed.vcf.gz"
+    PARAMS:
+      image: "/storage/images/glimpse2.sif"
+      binds: "/storage,/data"
+TASK_LIST:
+  - Beagle_Impute:
+      TOOL: beagle
+      FUNC: impute
+      WORK_DIR: "{work_dir_path}/{sample_id}/70_beagle"
+      INPUT:
+        input_vcf: "{work_dir_path}/{sample_id}/63_ligate/{sample_id}.phased.ligated.vcf.gz"   # 혹은 low-pass genotypes
+        ref_vcf:   "/storage/panels/hg38.beagle.ref.vcf.gz"
+        genetic_map: "/storage/maps/hg38/beagle.map"
+        chrom: "{chrom}"                          # 혹은 interval: "{interval}"
+      OUTPUT:
+        vcf: "{WORK_DIR}/{sample_id}.beagle.vcf.gz"
+      PARAMS:
+        threads: 16
+        xmx_gb: 24
+        # 로컬 자바/자르 사용 시:
+        # beagle_jar: "/storage/apps/bin/beagle.5.5.jar"
+        # 컨테이너 사용 시:
+        image: "/storage/images/beagle-5.5.sif"
+        binds: "/storage,/data"
+
+
