@@ -5,6 +5,12 @@ SETTING:
   workflow_name: cbNIPT_WGS-WGA-QC_Pipeline
   version: v0.0.1
   description: ''
+  
+LIMITS:
+  MAX_THREADS_TOTAL: 64     # 전체 동시 스레드 합 제한
+  MAX_JOBS: 12              # 동시에 돌리는 잡 수 제한
+  MAX_SAMPLES: 2   
+
 
 WORK_PARAMETERS:
   input_path: /storage/home/jhkim/Projects/cbNIPT/GCX-cbNIPT_QC_Setup-2025-10-23/Resources/Rawdata/WGS/{sample_id}_R{read}.fastq.gz
