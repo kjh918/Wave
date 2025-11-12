@@ -4,6 +4,13 @@ from multiprocessing import Pool, get_context
 from src.utils.flags import skip_if_done, flag_on_complete
 
 
+def run_local_shell(*, cmd: str, task, cwd=None) -> bool:
+    import subprocess
+    rc = subprocess.run(cmd, shell=True, cwd=cwd).returncode
+    if rc != 0:
+        raise RuntimeError(f"failed: {cmd}")
+    return True
+
 class Executor:
     """Base Executor — 공통 기능 정의"""
 
@@ -45,6 +52,98 @@ class BashExecutor(Executor):
 # ---------------------------------------------------------------------
 # ✅ 2. SunGridExecutor — SGE(qsub) 기반 실행
 # ---------------------------------------------------------------------
+# src/executor.py (발췌/추가)
+from pathlib import Path
+import os, subprocess, shlex, time
+
+class SunGridExecutor:
+    def __init__(
+        self,
+        log_root: Path,                      # ✅ 중앙 로그 루트
+        *,
+        run_id: str = None,                  # ✅ 세션 ID (없으면 자동)
+        user: str | None = None,
+        max_threads_total: int | None = None,
+        max_concurrent_jobs: int | None = None,
+        poll_sec: int = 15,
+        name_prefix: str | None = None,
+        link_in_taskdir: bool = True,        # ✅ taskdir에 심볼릭 링크 생성
+        layout: str = "by-sample",           # ✅ flat|by-sample|by-sample-task
+    ):
+        self.user = user or os.getenv("USER", "unknown")
+        self.log_root = Path(log_root)
+        self.run_id = run_id or time.strftime("%Y%m%d_%H%M%S")
+        self.session_dir = self.log_root / self.run_id
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.link_in_taskdir = link_in_taskdir
+        self.layout = layout
+        # (나머지 필드: 스레드/잡 제한 로직은 기존 유지)
+
+    def _layout_dir(self, sid: str | None, order: int | None, taskname: str) -> Path:
+        if self.layout == "flat" or sid is None:
+            return self.session_dir
+        if self.layout == "by-sample":
+            d = self.session_dir / sid
+        else:  # by-sample-task
+            d = self.session_dir / sid / f"{order:02d}_{taskname}" if order is not None else self.session_dir / sid / taskname
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def log_paths(self, *, sid: str | None, order: int | None, taskname: str):
+        d = self._layout_dir(sid, order, taskname)
+        base = f"{sid + '_' if sid else ''}{(order and f'{order:02d}-') or ''}{taskname}"
+        return (d / f"{base}.stdout", d / f"{base}.stderr")
+
+    def _link_into_taskdir(self, taskdir: Path, stdout_p: Path, stderr_p: Path):
+        if not self.link_in_taskdir:
+            return
+        try:
+            (taskdir / "stdout").unlink(missing_ok=True)
+            (taskdir / "stderr").unlink(missing_ok=True)
+            (taskdir / "stdout").symlink_to(stdout_p)
+            (taskdir / "stderr").symlink_to(stderr_p)
+        except Exception:
+            pass
+
+    def make_script(self, *, cmd: str, job_id: str, workdir: Path, outputs: list[str]) -> Path:
+        # (기존 그대로) .done/.failed 생성까지 포함
+        script_path = self.session_dir / f"{job_id}.sh"
+        q_outputs = " ".join(shlex.quote(p) for p in outputs) if outputs else ""
+        script_path.write_text(f"""#!/usr/bin/env bash
+set -euo pipefail
+cd {shlex.quote(str(workdir))}
+{cmd}
+missing=0
+files=({q_outputs})
+if [ ${{#files[@]}} -gt 0 ]; then
+  for f in "${{files[@]}}"; do
+    if [ ! -s "$f" ]; then missing=1; fi
+  done
+fi
+if [ $missing -eq 0 ]; then echo OK > .done; else echo FAILED > .failed; exit 1; fi
+""")
+        script_path.chmod(0o755)
+        return script_path
+
+    def qsub_sh(self, *, node: str, script_path: str, threads: int, job_id: str,
+                stdout_path: Path, stderr_path: Path, hold_jid: str | None = None, memory_gb: int | None = None) -> str:
+        # (제출 전 용량확인 로직 유지)
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        stderr_path.parent.mkdir(parents=True, exist_ok=True)
+        args = [
+            "qsub", "-N", job_id, "-q", node,
+            "-o", str(stdout_path), "-e", str(stderr_path),
+            "-pe", "smp", str(int(threads)), "-V", "-cwd"
+        ]
+        if memory_gb is not None: args += ["-l", f"h_vmem={int(memory_gb)}G"]
+        if hold_jid: args += ["-hold_jid", str(hold_jid)]
+        args.append(script_path)
+        out = subprocess.check_output(args, text=True)
+        jid = next((p for p in reversed(out.split()) if p.isdigit()), None) or out.split()[-1]
+        # (활성잡 등록 로직 유지)
+        return jid
+    
+    
 class SunGridExecutor(Executor):
     """SGE (qsub) 기반 실행기"""
 

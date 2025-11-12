@@ -361,93 +361,133 @@ class Workflow:
     # 실행
     # --------------------------
     def run(self) -> Dict[str, Any]:
-        samples = self.discover_samples()
-        self.workflow["SAMPLES"] = samples
-
-        if not samples:
-            return {"samples": {}, "masters": {}}
-        count = 0 
-        masters: Dict[str, Path] = {}
-        for sid, _ in samples.items():
-            # 1) 레거시 TASK_LIST 정규화
-            
-            tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", {}), sample_id=sid)
-
-            # 샘플 작업 루트
-            sid_root = self.work_dir / sid
-            sid_root.mkdir(parents=True, exist_ok=True)
-
-            # 마스터 스크립트
-            master_json = sid_root / f"workflow_{sid}.json"
-            total_task_dict = {}
-            with open(master_json, 'w') as handle:
-            
-                qids: list[str] = []
-                prev_qid: Optional[str] = None
-
-                for _task in tasks_norm:
-                    tdir = _task['workdir']
-                    tdir.mkdir(parents=True, exist_ok=True)
-                    TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
-
-                    task = _instantiate_task(
-                        TaskCls,
-                        name = _task["name"],
-                        tool = _task["tool"],
-                        func = _task["func"],
-                        threads = _task["threads"],
-                        workdir = tdir,
-                        inputs = _task.get("inputs", {}),
-                        outputs = _task.get("outputs", {}),
-                        params = _task.get("params", {}),
-                    )
-
-                    task_cmd = list(self._to_shell_lines(task.to_sh()))
-                    
-                    total_task_dict[task.name] = {
-                        'user': self.workflow['SETTING']['User'],
-                        'node': self.workflow['SETTING']['Node'],
-                        'job_id': task.name,
-                        'threads': task.threads,
-                        'cmd': task_cmd[0]
-                    }
-
-                    sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
-                
-                    script_path = sample_executor._make_script(task_cmd[0], task.name)
-                    print(script_path)
-                    # 이전 태스크 qid를 hold_jid로 전달 (SGE가 순차 보장)
-                    qid = sample_executor.qsub_sh(
-                        node=self.workflow['SETTING']['Node'],
-                        script_path=str(script_path),
-                        threads=task.threads,
-                        job_id=task.name,
-                        random_jobid=False,
-                        hold_jid=prev_qid,   # ⬅️ 핵심
-                    )
-                    qids.append(qid)
-                    prev_qid = qid
-
-                json.dump(total_task_dict, handle,indent=4)
-                masters[sid] = master_json
-            count += 1
-            if count == 3:
-                exit()
-
-        return {"samples": samples, "masters": masters}
-
-        if not run:
-            print("[WAVE] Dry-run: generated scripts")
-            for sid, sh in masters.items():
-                print(f"  - {sid}: {sh}")
+        plan = self.build()
+        masters = plan.get("masters", {})
+        if not masters:
+            print("[WAVE] No masters to run.")
             return plan
 
-        for sid, sh in masters.items():
-            print(f"[WAVE] Running {sid}: {sh}")
-            ret = subprocess.run(["bash", str(sh)]).returncode
-            if ret != 0:
-                raise RuntimeError(f"Workflow for {sid} failed with code {ret}")
+        for sid, json_file in masters.items():
+            with open(json_file, "r") as handle:
+                task_map: Dict[str, Any] = json.load(handle)
+
+            # 선언 순서가 JSON에 보장되지 않을 수 있으니, 파일명/step번호로 정렬하거나
+            # 여기서는 선언 순서를 보장하려면 OrderedDict를 쓰거나, build 단계에서 리스트를 저장하는 방식도 OK.
+            # 지금은 task_map를 name으로 정렬 없이 순회 (필요시 정렬 규칙 추가)
+            prev_qid: Optional[str] = None
+            for task_name, meta in task_map.items():
+                workdir = Path(meta["workdir"])
+                workdir.mkdir(parents=True, exist_ok=True)
+
+                # .done 있으면 스킵(출력검증은 executor/flags에서 수행하는 게 베스트)
+                done_flag = workdir / ".done"
+                if done_flag.exists():
+                    print(f"[WAVE] Skip {sid}:{task_name} (done flag found)")
+                    continue
+
+                executor = SunGridExecutor(logdir=workdir / "log")
+                script_path = executor._make_script(meta["cmd"], task_name)
+
+                qid = executor.qsub_sh(
+                    node=meta["node"],
+                    script_path=str(script_path),
+                    threads=int(meta["threads"]),
+                    job_id=meta["job_id"],
+                    random_jobid=False,
+                    hold_jid=prev_qid,
+                )
+                prev_qid = qid
+                print(f"[WAVE] qsub {sid}:{task_name} -> {qid}")
+
         return plan
+    # def run(self) -> Dict[str, Any]:
+    #     samples = self.discover_samples()
+    #     self.workflow["SAMPLES"] = samples
+
+    #     if not samples:
+    #         return {"samples": {}, "masters": {}}
+    #     count = 0 
+    #     masters: Dict[str, Path] = {}
+    #     for sid, _ in samples.items():
+    #         # 1) 레거시 TASK_LIST 정규화
+            
+    #         tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", {}), sample_id=sid)
+
+    #         # 샘플 작업 루트
+    #         sid_root = self.work_dir / sid
+    #         sid_root.mkdir(parents=True, exist_ok=True)
+
+    #         # 마스터 스크립트
+    #         master_json = sid_root / f"workflow_{sid}.json"
+    #         total_task_dict = {}
+    #         with open(master_json, 'w') as handle:
+            
+    #             qids: list[str] = []
+    #             prev_qid: Optional[str] = None
+
+    #             for _task in tasks_norm:
+    #                 tdir = _task['workdir']
+    #                 tdir.mkdir(parents=True, exist_ok=True)
+    #                 TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
+
+    #                 task = _instantiate_task(
+    #                     TaskCls,
+    #                     name = _task["name"],
+    #                     tool = _task["tool"],
+    #                     func = _task["func"],
+    #                     threads = _task["threads"],
+    #                     workdir = tdir,
+    #                     inputs = _task.get("inputs", {}),
+    #                     outputs = _task.get("outputs", {}),
+    #                     params = _task.get("params", {}),
+    #                 )
+
+    #                 task_cmd = list(self._to_shell_lines(task.to_sh()))
+                    
+    #                 total_task_dict[task.name] = {
+    #                     'user': self.workflow['SETTING']['User'],
+    #                     'node': self.workflow['SETTING']['Node'],
+    #                     'job_id': task.name,
+    #                     'threads': task.threads,
+    #                     'cmd': task_cmd[0]
+    #                 }
+
+    #                 sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
+                
+    #                 script_path = sample_executor._make_script(task_cmd[0], task.name)
+    #                 print(script_path)
+    #                 # 이전 태스크 qid를 hold_jid로 전달 (SGE가 순차 보장)
+    #                 qid = sample_executor.qsub_sh(
+    #                     node=self.workflow['SETTING']['Node'],
+    #                     script_path=str(script_path),
+    #                     threads=task.threads,
+    #                     job_id=task.name,
+    #                     random_jobid=False,
+    #                     hold_jid=prev_qid,   # ⬅️ 핵심
+    #                 )
+    #                 qids.append(qid)
+    #                 prev_qid = qid
+
+    #             json.dump(total_task_dict, handle,indent=4)
+    #             masters[sid] = master_json
+    #         count += 1
+    #         if count == 3:
+    #             exit()
+
+    #     return {"samples": samples, "masters": masters}
+
+    #     if not run:
+    #         print("[WAVE] Dry-run: generated scripts")
+    #         for sid, sh in masters.items():
+    #             print(f"  - {sid}: {sh}")
+    #         return plan
+
+    #     for sid, sh in masters.items():
+    #         print(f"[WAVE] Running {sid}: {sh}")
+    #         ret = subprocess.run(["bash", str(sh)]).returncode
+    #         if ret != 0:
+    #             raise RuntimeError(f"Workflow for {sid} failed with code {ret}")
+    #     return plan
 
     # --------------------------
     # 내부 헬퍼
