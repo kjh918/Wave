@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Sequence
 from pathlib import Path
 import os, shlex
+from glob import glob
 
 from src.tasks.task import Task
 from src.tasks.task_registry import register_task
@@ -12,13 +13,14 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
+
 def safe_quote(arg):
     # 리다이렉션 문자나 파이프(|) 등은 그대로 출력
     if arg in {">", ">>", "<", "|", "2>", "&>", "&&", "||"}:
         return arg
     return shlex.quote(arg)
 
-@register_task("bwa.mem")
+@register_task("bcftools.mpileup")
 class BwaMemTask(Task):
     """
     BWA MEM alignment task (Singularity supported)
@@ -59,47 +61,54 @@ class BwaMemTask(Task):
             self, *, inputs: Dict[str, Any], outputs: Dict[str, Any], params: Dict[str, Any],
             threads: int, workdir: str, sample_id: str | None = None
         ) -> List[Sequence[str] | str]:
-        read1 = inputs.get("read1")
-        read2 = inputs.get("read2")
-        sam_out = outputs.get("sam") 
 
-        image = params.get("image")
-        binds = normalize_binds(params.get("binds"))
-        singularity_bin = params.get("singularity_bin", "singularity")
-        bwa_bin = params.get("bwa_bin", "bwa")
-        reference_genome = params.get("reference_genome")
+        bam_path = inputs.get("bam_path")
+        reference = inputs.get("reference")
+        ploidy_file = inputs.get("ploidy_file")
 
-        rg_line = (
-            f"@RG\\tID:{params.get('read_group_id', sample_id)}"
-            f"\\tPL:{params.get('platform', 'ILLUMINA')}"
-            f"\\tLB:{params.get('library_name', sample_id)}"
-            f"\\tSM:{params.get('sample_id', sample_id)}"
-            f"\\tCN:{params.get('center', 'CENTER')}"
-        )
+        sample_id = str(params.get("sample_id", "bcftools"))
+        out_vcf = outputs.get("vcf") 
+        
+        bcftools = str(params.get("bcftools", "bcftools"))
+        min_map_qual = str(params.get("min_map_qual", 20))
+        min_base_qual = str(params.get("min_base_qual", 20))
+        threads = str(params.get("min_base_qual", 4))
+        singularity_bin = str(params.get("singularity_bin", 'singularity'))
+        total_cmd = []
 
-        core = [
-            bwa_bin, "mem", "-M",
-            "-t", str(threads),
-            "-Y", "-L", f'{params.get("read_length")},{params.get("read_length")}',
-            "-R", rg_line,
-            reference_genome, str(read1), str(read2),
-            ">",f'{sam_out}'
-        ]
+        for bam in glob(bam_path):
+            image = params.get("image")
+            binds = normalize_binds(params.get("reference"))
 
-        redirect = f"> {sam_out}"
-        if image:
-            cmd = singularity_exec_cmd(
-                image=image,
-                argv=core,
-                binds=binds,
-                singularity_bin=singularity_bin
-            ) 
-            # print(cmd)
-            cmd = " ".join(map(safe_quote, cmd))
-            # cmd.append(f" {redirect}")
-        else:
+            sample_id = os.path.basename(bam).replace('.bam','.vcf.gz')
+            core = [
+                bcftools, 'mpileup',
+                '-f', reference,
+                '-a', 'AD,DP,SP',
+                '-q', min_map_qual,
+                '-Q', min_base_qual,
+                '--threads',threads,
+                '-Ou', f'{bam}','|',
+                bcftools, 'call',
+                '--ploidy-file', ploidy_file,
+                '-mv','-Oz','-o', f'{out_vcf}/{sample_id}'
+            ]
+
+            # if image:
+            #     cmd = singularity_exec_cmd(
+            #         image=image,
+            #         argv=core,
+            #         binds=binds,
+            #         singularity_bin=singularity_bin
+            #     ) 
+            #     # print(cmd)
+            #     cmd = " ".join(map(safe_quote, cmd))
+            #     total_cmd.append(cmd)
+            # else:
             cmd = " ".join(map(safe_quote, core))#  + f" {redirect}"
-        return [cmd]
+            total_cmd.append(cmd)
+
+        return ['\n'.join(total_cmd)]
 
     def to_sh(self) -> List[str]:
         p = {**self.DEFAULTS, **(self.params or {})}

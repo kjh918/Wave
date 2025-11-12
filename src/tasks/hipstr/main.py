@@ -13,40 +13,53 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
-@register_task("[task].[func]")
-class GatkApplyBQSRTask(Task):
-    TYPE = "[task].[func]"
+@register_task("hipstr")
+class HipSTRTask(Task):
+    TYPE = "hipstr"
 
     INPUTS = {
-        "bam": {"type": "path", "required": True, "desc": "BAM (post-dedup or realigned)"},
-        "bqsr_table": {"type": "path", "required": True, "desc": "BQSR table"},
+        "bams": {"type": "path", "required": True, "desc": "BAM (post-dedup or realigned)\nsep=','"},
+        "fasta": {"type": "path", "required": True, "desc": "reference fasta"},
+        "regions": {"type": "path", "required": True, "desc": "BED"},
     }
     OUTPUTS = {
-        "bam": {"type": "path", "required": False, "desc": "Recalibrated BAM"},
+        "vcf": {"type": "path", "required": False, "desc": "STR Calls vcf"},
     }
     DEFAULTS: Dict[str, Any] = {
-        "gatk_bin": "gatk",
-        "image": "/storage/images/gatk-4.4.0.0.sif",
+        "hipstr": "/storage/apps/HipSTR-0.7/HipSTR",
+        "region": "/storage/home/kangsm/myDB/STR_references/hg38.annotated.markers.HipSTR.bed",
+        "image": "",
         "binds": ["/storage", "/data"],
-        "singularity_bin": "singularity",
-        "parallel_gc_threads": 14,
-        "xmx_gb": 16,
+        "stutter_in": False,
+        "singularity_bin": "singularity"
     }
 
     def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id: Optional[str]=None) -> List[Sequence[str] | str]:
         
-        bam = inputs["bam"]; table = inputs["bqsr_table"]
-        out_bam = outputs.get("bam") or os.path.join(out_dir, f"{base}.recal.bam")
+        ## INPUT ##
+        bams = inputs["bams"]
+        fasta = inputs["fasta"]
+        region = inputs["region"]
+        
+        ## OUTPUT ##
+        out_str_vcf = outputs.get("vcf") or os.path.join(out_dir, f"{base}.recal.bam")
 
-        gatk_bin = str(params.get("gatk_bin", "gatk"))
+        ## PARAMS ##
+        hipstr = str(params.get("hipstr", "hipstr"))
+        
+        
         xmx = int(params.get("xmx_gb", 16))
         pgc = int(params.get("parallel_gc_threads", 14))
+        image = params.get("image")
 
         argv = [
-            
+            hipstr, 
+            '--bams',f'{bams}',
+            '--fasta',f'{fasta}',
+            '--bed',f'{region}',
+            '--str-vcf',f'{out_str_vcf}'
         ]
 
-        image = params.get("image")
         if image:
             cmd = singularity_exec_cmd(
                 image=str(image),

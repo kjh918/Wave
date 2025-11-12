@@ -29,9 +29,9 @@ class GatkApplyBQSRTask(Task):
         "gatk_bin": "gatk",
         "image": "/storage/images/gatk-4.4.0.0.sif",
         "binds": ["/storage", "/data"],
-        "validation_stringency": 'LENIENT',
-        "is_bisulfite_sequenced": 'false',
-        "assume_sorted": 'true',
+        "validation_stringency": "LENIENT",
+        "is_bisulfite_sequenced": "false",
+        "assume_sorted": "true",
         "singularity_bin": "singularity",
         "parallel_gc_threads": 14,
         "xmx_gb": 16,
@@ -49,22 +49,22 @@ class GatkApplyBQSRTask(Task):
         gatk_bin = str(params.get("gatk_bin", "gatk"))
         xmx = int(params.get("xmx_gb", 16))
         pgc = int(params.get("parallel_gc_threads", 14))
-        validation_stringency = str(params.get("validation_stringency", 'LENIENT'))
+        validation_stringency = str(params.get("validation_stringency", "LENIENT"))
         assume_sorted = bool(params.get("assume_sorted", True))
         is_bisulfite_sequenced = bool(params.get("is_bisulfite_sequenced", False))
 
         argv = [
             gatk_bin,
             "--java-options", f"-XX:ParallelGCThreads={pgc} -Xmx{xmx}g",
-            'CollectGcBiasMetrics ',
-            f'R={ref_fasta} ',
-            f'I={bam} ',
-            f'O={out_metrics} ',
-            f'CHART={out_chart_pdf} ',
-            f'S={out_summary} ',
-            f'VALIDATION_STRINGENCY={validation_stringency} ',
-            f'ASSUME_SORTED={"true" if assume_sorted else "false"} ',
-            f'IS_BISULFITE_SEQUENCED={"true" if is_bisulfite_sequenced else "false"}'
+            "CollectGcBiasMetrics",
+            f"R={ref_fasta}",
+            f"I={bam}",
+            f"O={out_metrics}",
+            f"CHART={out_chart_pdf}",
+            f"S={out_summary}",
+            f"VALIDATION_STRINGENCY={validation_stringency}",
+            f"ASSUME_SORTED={'true' if assume_sorted else 'false'}",
+            f"IS_BISULFITE_SEQUENCED={'true' if is_bisulfite_sequenced else 'false'}"
         ]
 
         image = params.get("image")

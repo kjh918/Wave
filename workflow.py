@@ -39,10 +39,34 @@ def _parse_placeholders(tpl: str) -> List[str]:
     return re.findall(r"\{([a-zA-Z0-9_]+)\}", tpl)
 
 def _tpl_to_regex(tpl: str, placeholders: List[str]) -> re.Pattern:
-    esc = re.escape(tpl)
-    for ph in placeholders:
-        esc = esc.replace(re.escape(f"{{{ph}}}"), rf"(?P<{ph}>[^/]+)")
-    return re.compile(rf"^{esc}$")
+    token_re = re.compile(r"\{(\w+)\}")
+    seen = set()
+    parts = []
+    last = 0
+
+    for m in token_re.finditer(tpl):
+        # 일반 문자열 구간은 이스케이프
+        parts.append(re.escape(tpl[last:m.start()]))
+
+        name = m.group(1)
+        if name in placeholders:
+            if name in seen:
+                # 동일 값 강제: 두 번째부터는 백레퍼런스
+                parts.append(rf"(?P={name})")
+            else:
+                # 첫 번째 등장: 캡처 그룹
+                parts.append(rf"(?P<{name}>[^/]+)")
+                seen.add(name)
+        else:
+            # 허용되지 않은 플레이스홀더는 원문 그대로 이스케이프
+            parts.append(re.escape(m.group(0)))
+        last = m.end()
+
+    # 마지막 꼬리 구간
+    parts.append(re.escape(tpl[last:]))
+
+    pattern = "^" + "".join(parts) + "$"
+    return re.compile(pattern)
 
 def _tpl_to_glob(tpl: str, placeholders: List[str]) -> str:
     pat = tpl
@@ -60,9 +84,19 @@ def _render_value(val: Any, ctx: Dict[str, Any]) -> Any:
     return val
 
 def _sh_join(argv: Iterable[str]) -> str:
-    # 토큰 리스트를 안전하게 하나의 쉘 라인으로
-    return shlex.join(list(map(str, argv)))
-
+    """토큰 리스트를 안전하게 하나의 쉘 라인으로.
+    단, 리다이렉션/파이프 기호는 따옴표로 감싸지 않음."""
+    SPECIAL_TOKENS = {">", ">>", "<", "|", "2>", "&>", "&&", "||"}
+    parts = []
+    for arg in argv:
+        s = str(arg)
+        print(s)
+        if s in SPECIAL_TOKENS:
+            parts.append(s)
+            print(parts)
+        else:
+            parts.append(shlex.quote(s))
+    return " ".join(parts)
 
 # --------------------------
 # 핵심: Task 인스턴스 안전 생성 (여러 시그니처 지원)
@@ -254,7 +288,7 @@ class Workflow:
 
         if not samples:
             return {"samples": {}, "masters": {}}
-
+        count = 0 
         masters: Dict[str, Path] = {}
         for sid, _ in samples.items():
             # 1) 레거시 TASK_LIST 정규화
@@ -269,6 +303,10 @@ class Workflow:
             master_json = sid_root / f"workflow_{sid}.json"
             total_task_dict = {}
             with open(master_json, 'w') as handle:
+            
+                qids: list[str] = []
+                prev_qid: Optional[str] = None
+
                 for _task in tasks_norm:
                     tdir = _task['workdir']
                     tdir.mkdir(parents=True, exist_ok=True)
@@ -294,24 +332,109 @@ class Workflow:
                         'threads': task.threads,
                         'cmd': task_cmd[0]
                     }
-                json.dump(total_task_dict, handle,indent=4)
-                masters[sid] = master_json
+                    # print(task_cmd[0])
+                    # exit()
+                    sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
+                    script_path = sample_executor._make_script(task_cmd[0], task.name)
+
+                    # # 이전 태스크 qid를 hold_jid로 전달 (SGE가 순차 보장)
+                    # qid = sample_executor.qsub_sh(
+                    #     node=self.workflow['SETTING']['Node'],
+                    #     script_path=str(script_path),
+                    #     threads=task.threads,
+                    #     job_id=task.name,
+                    #     random_jobid=False,
+                    #     hold_jid=prev_qid,   # ⬅️ 핵심
+                    # )
+                    # qids.append(qid)
+                    # prev_qid = qid
+
+            #     json.dump(total_task_dict, handle,indent=4)
+            #     masters[sid] = master_json
+            # count += 1
+            # if count == 3:
+            #     exit()
 
         return {"samples": samples, "masters": masters}
 
     # --------------------------
     # 실행
     # --------------------------
-    def run(self, run: bool = False, sge=True):
-        plan = self.build()
-        masters = plan.get("masters", {})
-        
-        if sge:
+    def run(self) -> Dict[str, Any]:
+        samples = self.discover_samples()
+        self.workflow["SAMPLES"] = samples
 
-            for sid, json_file in master.items():
-                with open(json_file, 'r') as handle:
-                    json_data = json.load(handle)
+        if not samples:
+            return {"samples": {}, "masters": {}}
+        count = 0 
+        masters: Dict[str, Path] = {}
+        for sid, _ in samples.items():
+            # 1) 레거시 TASK_LIST 정규화
+            
+            tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", {}), sample_id=sid)
+
+            # 샘플 작업 루트
+            sid_root = self.work_dir / sid
+            sid_root.mkdir(parents=True, exist_ok=True)
+
+            # 마스터 스크립트
+            master_json = sid_root / f"workflow_{sid}.json"
+            total_task_dict = {}
+            with open(master_json, 'w') as handle:
+            
+                qids: list[str] = []
+                prev_qid: Optional[str] = None
+
+                for _task in tasks_norm:
+                    tdir = _task['workdir']
+                    tdir.mkdir(parents=True, exist_ok=True)
+                    TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
+
+                    task = _instantiate_task(
+                        TaskCls,
+                        name = _task["name"],
+                        tool = _task["tool"],
+                        func = _task["func"],
+                        threads = _task["threads"],
+                        workdir = tdir,
+                        inputs = _task.get("inputs", {}),
+                        outputs = _task.get("outputs", {}),
+                        params = _task.get("params", {}),
+                    )
+
+                    task_cmd = list(self._to_shell_lines(task.to_sh()))
+                    
+                    total_task_dict[task.name] = {
+                        'user': self.workflow['SETTING']['User'],
+                        'node': self.workflow['SETTING']['Node'],
+                        'job_id': task.name,
+                        'threads': task.threads,
+                        'cmd': task_cmd[0]
+                    }
+
+                    sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
                 
+                    script_path = sample_executor._make_script(task_cmd[0], task.name)
+                    print(script_path)
+                    # 이전 태스크 qid를 hold_jid로 전달 (SGE가 순차 보장)
+                    qid = sample_executor.qsub_sh(
+                        node=self.workflow['SETTING']['Node'],
+                        script_path=str(script_path),
+                        threads=task.threads,
+                        job_id=task.name,
+                        random_jobid=False,
+                        hold_jid=prev_qid,   # ⬅️ 핵심
+                    )
+                    qids.append(qid)
+                    prev_qid = qid
+
+                json.dump(total_task_dict, handle,indent=4)
+                masters[sid] = master_json
+            count += 1
+            if count == 3:
+                exit()
+
+        return {"samples": samples, "masters": masters}
 
         if not run:
             print("[WAVE] Dry-run: generated scripts")

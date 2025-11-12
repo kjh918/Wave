@@ -266,10 +266,17 @@ TASK_LIST:
         assume_sorted: True
         IS_BISULFITE_SEQUENCED: False
 
-
-
-
-
+  - Depth_Samtools:
+      TOOL: samtools
+      FUNC: depth
+      THREADS: 4
+      WORK_DIR: "{work_dir_path}/{sample_id}/09_BAM_QC"
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/08_BQSR_GATK/{sample_id}.recal.bam"
+      OUTPUT:
+        depth: "{WORK_DIR}/{sample_id}.depth.txt"
+      PARAMS:
+        all_position: True
 
 
 

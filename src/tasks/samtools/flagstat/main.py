@@ -11,8 +11,8 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
-@register_task("samtools.depth")
-class SamtoolsDepthTask(Task):
+@register_task("samtools.flagstats")
+class SamtoolsFlagstatsTask(Task):
     """
     Index BAM only (expects a sorted BAM).
     Inputs:
@@ -23,18 +23,16 @@ class SamtoolsDepthTask(Task):
     Params:
       index_type (bai|csi), threads, samtools_bin, image, binds, singularity_bin
     """
-    TYPE = "samtools.depth"
+    TYPE = "samtools.flagstats"
 
     INPUTS = {
         "bam": {"type": "path", "required": True, "desc": "Sorted BAM to index"},
     }
     OUTPUTS = {
-        "bed": {"type": "path", "required": False, "desc": "Index path (.bai or .csi)"},
+        "txt":   {"type": "path",  "required": False, "desc": "Output directory (default: same directory as BAM or workdir)"}
     }
     DEFAULTS: Dict[str, Any] = {
         "threads": 8,
-        "all_position": "true",
-        "bed_format": "true",     
         "samtools_bin": "samtools",
         "image": None,
         "binds": None,
@@ -43,25 +41,30 @@ class SamtoolsDepthTask(Task):
 
     def _build_cmd(self, *, inputs, outputs, params, threads, workdir, sample_id: Optional[str] = None) -> List[Sequence[str] | str]:
         samtools = str(params.get("samtools_bin", "samtools"))
-
         image = params.get("image")
         binds = normalize_binds(params.get("binds"))
         singularity_bin = str(params.get("singularity_bin", "singularity"))
 
         bam = inputs["bam"]
-        out_depth = outputs.get("depth") or os.path.join(out_dir, f"{base}.depth.txt")
-
-        all_position = bool(params.get("all_position", True))
-        bed_format = bool(params.get("bed_format", True))
-
+        bam_dir = os.path.dirname(bam) or workdir
+        out_dir = ensure_dir(outputs.get("dir") or bam_dir)
         argv = [
-            samtools,
-            "depth",
-            f"{'-a' if all_position else ''}",
-            f"-f", f"{bam}",
-            f">",f"{out_depth}"
+            java_bin,
+            f"-XX:ParallelGCThreads={pgc}",
+            f"-Xmx{xmx_gb}g",
+            "-jar", jar_path,
+            "MergeBamAlignment",
+            "--UNMAPPED_BAM", unmapped_bam,
+            "--ALIGNED_BAM", aligned_bam,
+            "--REFERENCE_SEQUENCE", reference,
+            "--OUTPUT", out_bam,
+            "--CREATE_INDEX", str(params.get("create_index", True)).lower(),
+            "--MAX_INSERTIONS_OR_DELETIONS", str(params.get("max_indels", -1)),
+            "--CLIP_ADAPTERS", str(params.get("clip_adapters", False)).lower(),
+            "--PRIMARY_ALIGNMENT_STRATEGY", str(params.get("primary_strategy", "MostDistant")),
         ]
-
+        
+        # 컨테이너 래핑
         image = params.get("image")
         if image:
             cmd = singularity_exec_cmd(
@@ -73,7 +76,6 @@ class SamtoolsDepthTask(Task):
             return [" ".join(map(shlex.quote, cmd))]
         else:
             return [" ".join(map(shlex.quote, argv))]
-
 
 
     def to_sh(self) -> List[str]:
