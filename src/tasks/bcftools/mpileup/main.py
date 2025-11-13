@@ -62,7 +62,7 @@ class BwaMemTask(Task):
             threads: int, workdir: str, sample_id: str | None = None
         ) -> List[Sequence[str] | str]:
 
-        bam_path = inputs.get("bam_path")
+        bam = inputs.get("bam_path")
         reference = inputs.get("reference")
         ploidy_file = inputs.get("ploidy_file")
 
@@ -73,41 +73,35 @@ class BwaMemTask(Task):
         min_map_qual = str(params.get("min_map_qual", 20))
         min_base_qual = str(params.get("min_base_qual", 20))
         threads = str(params.get("min_base_qual", 4))
+        chrom = str(params.get("chrom", True))
+
         singularity_bin = str(params.get("singularity_bin", 'singularity'))
+        
+        image = params.get("image")
+        binds = normalize_binds(params.get("reference"))
+        
         total_cmd = []
-
-        for bam in glob(bam_path):
-            image = params.get("image")
-            binds = normalize_binds(params.get("reference"))
-
-            sample_id = os.path.basename(bam).replace('.bam','.vcf.gz')
-            core = [
-                bcftools, 'mpileup',
-                '-f', reference,
-                '-a', 'AD,DP,SP',
-                '-q', min_map_qual,
-                '-Q', min_base_qual,
-                '--threads',threads,
-                '-Ou', f'{bam}','|',
-                bcftools, 'call',
-                '--ploidy-file', ploidy_file,
-                '-mv','-Oz','-o', f'{out_vcf}/{sample_id}'
-            ]
-
-            # if image:
-            #     cmd = singularity_exec_cmd(
-            #         image=image,
-            #         argv=core,
-            #         binds=binds,
-            #         singularity_bin=singularity_bin
-            #     ) 
-            #     # print(cmd)
-            #     cmd = " ".join(map(safe_quote, cmd))
-            #     total_cmd.append(cmd)
-            # else:
-            cmd = " ".join(map(safe_quote, core))#  + f" {redirect}"
-            total_cmd.append(cmd)
-
+        if chrom:
+            chrom_list = [f'chr{i}' for i in range(1,23)] + ['chrX','chrY','chrM']
+            for chrom in chrom_list:
+                
+                sample_id = os.path.basename(bam).replace('.bam',f'.{chrom}.vcf.gz')
+                
+                core = [
+                    bcftools, 'mpileup',
+                    '-f', reference,
+                    '-a', 'AD,DP,SP',
+                    '-q', min_map_qual,
+                    '-Q', min_base_qual,
+                    '-r', chrom,
+                    '--threads',threads,
+                    '-Oz', f'{bam}','|',
+                    bcftools, 'call',
+                    '--ploidy-file', ploidy_file,
+                    '-mv','-Oz','-o', f'{out_vcf}/{sample_id}'
+                ]
+                cmd = " ".join(map(safe_quote, core))
+                total_cmd.append(cmd)
         return ['\n'.join(total_cmd)]
 
     def to_sh(self) -> List[str]:

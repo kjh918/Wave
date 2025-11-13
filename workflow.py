@@ -330,30 +330,13 @@ class Workflow:
                         'node': self.workflow['SETTING']['Node'],
                         'job_id': task.name,
                         'threads': task.threads,
+                        'workdir': str(tdir),
                         'cmd': task_cmd[0]
                     }
-                    # print(task_cmd[0])
-                    # exit()
                     sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
                     script_path = sample_executor._make_script(task_cmd[0], task.name)
-
-                    # # 이전 태스크 qid를 hold_jid로 전달 (SGE가 순차 보장)
-                    # qid = sample_executor.qsub_sh(
-                    #     node=self.workflow['SETTING']['Node'],
-                    #     script_path=str(script_path),
-                    #     threads=task.threads,
-                    #     job_id=task.name,
-                    #     random_jobid=False,
-                    #     hold_jid=prev_qid,   # ⬅️ 핵심
-                    # )
-                    # qids.append(qid)
-                    # prev_qid = qid
-
-            #     json.dump(total_task_dict, handle,indent=4)
-            #     masters[sid] = master_json
-            # count += 1
-            # if count == 3:
-            #     exit()
+                json.dump(total_task_dict, handle, indent=4)
+            masters[sid] = master_json
 
         return {"samples": samples, "masters": masters}
 
@@ -376,6 +359,7 @@ class Workflow:
             # 지금은 task_map를 name으로 정렬 없이 순회 (필요시 정렬 규칙 추가)
             prev_qid: Optional[str] = None
             for task_name, meta in task_map.items():
+                print(1)
                 workdir = Path(meta["workdir"])
                 workdir.mkdir(parents=True, exist_ok=True)
 
