@@ -11,6 +11,13 @@ from src.tasks.utils import (
     to_sh_from_builder,
 )
 
+
+def safe_quote(arg):
+    # 리다이렉션 문자나 파이프(|) 등은 그대로 출력
+    if arg in {">", ">>", "<", "|", "2>", "&>", "&&", "||"}:
+        return arg
+    return shlex.quote(arg)
+
 @register_task("beagle.impute")
 class BeagleImputeTask(Task):
     """
@@ -67,9 +74,9 @@ class BeagleImputeTask(Task):
         "beagle_jar": "/storage/apps/bin/beagle.5.5.jar",
         "impute": True,
         "gp": True,
-        "ne": None,
-        "err": None,
-        "seed": None,
+        "ne": 100000,
+        "err": None, #  If no err parameter is specified, the err parameter will be set equal 𝜃/(2(𝜃 + 𝐻)) where 𝐻 is the number of haplotypes and 𝜃 = 1/(0.5 + ln𝐻)
+        "seed": 7890,
         "image": None,
         "binds": None,
         "singularity_bin": "singularity",
@@ -94,24 +101,10 @@ class BeagleImputeTask(Task):
         sample_id: Optional[str] = None,
     ) -> List[Sequence[str] | str]:
 
-        gt = inputs.get("input_vcf")
-        if not gt:
-            raise ValueError("[beagle.impute] inputs.input_vcf is required")
-
-        ref = inputs.get("ref_vcf")                # 없는 경우도 허용(단독 refine 용도)
-        gmap = inputs.get("genetic_map")
-
-        # 영역 제한
-        interval = inputs.get("interval")
-        chrom    = inputs.get("chrom")
-
-        # 출력 경로
-        out_dir = ensure_dir(outputs.get("dir") or workdir)
-        out_vcf = outputs.get("vcf")
-        if not out_vcf:
-            base = sample_id or os.path.basename(str(gt)).replace(".vcf.gz","").replace(".bcf","").replace(".vcf","")
-            out_vcf = os.path.join(out_dir, f"{base}.beagle.vcf.gz")
-        prefix = self._prefix_from_output_path(out_vcf)
+        gt = inputs.get("vcf")
+        ref = inputs.get("ref")                # 없는 경우도 허용(단독 refine 용도)
+        gmap = inputs.get("map")           # 없는 경우도 허용(단독 refine 용도)
+        impute_vcf = outputs.get("impute_vcf")
 
         # 파라미터 정리
         java_bin   = str(params.get("java_bin", "java"))
@@ -120,50 +113,43 @@ class BeagleImputeTask(Task):
         xmx_gb     = int(params.get("xmx_gb", 16))
         impute     = bool(params.get("impute", True))
         gp         = bool(params.get("gp", True))
+        chrom       = bool(params.get("chrom", True))
         ne         = params.get("ne")
         err        = params.get("err")
         seed       = params.get("seed")
 
         # Beagle argv 조립
-        argv: List[str] = [
-            java_bin, f"-Xmx{xmx_gb}g",
-            "-jar", beagle_jar,
-            f"gt={gt}",
-            f"out={prefix}",
-            f"nthreads={nthreads}",
-            f"impute={'true' if impute else 'false'}",
-            f"gp={'true' if gp else 'false'}",
-        ]
-        if ref:   argv += [f"ref={ref}"]
-        if gmap:  argv += [f"map={gmap}"]
-        if interval: argv += [f"interval={interval}"]
-        elif chrom:  argv += [f"chrom={chrom}"]
-        if ne is not None:   argv += [f"ne={ne}"]
-        if err is not None:  argv += [f"err={err}"]
-        if seed is not None: argv += [f"seed={seed}"]
 
-        # 컨테이너 래핑
-        image = params.get("image")
-        if image:
-            cmd = singularity_exec_cmd(
-                image=str(image),
-                argv=argv,
-                binds=normalize_binds(params.get("binds")),
-                singularity_bin=str(params.get("singularity_bin", "singularity")),
-            )
-            run_line = shlex.join(cmd)
-            # Beagle는 out=<prefix>로 파일 생성 → prefix.vcf.gz 가 최종 산출물
-            idx_line = shlex.join(singularity_exec_cmd(
-                image=str(image),
-                argv=["bcftools", "index", "-f", f"{prefix}.vcf.gz"],
-                binds=normalize_binds(params.get("binds")),
-                singularity_bin=str(params.get("singularity_bin", "singularity")),
-            ))
-        else:
-            run_line = shlex.join(argv)
-            idx_line = " ".join(["bcftools", "index", "-f", shlex.quote(f"{prefix}.vcf.gz")])
+        total_cmd = []
+        if chrom:
+            chrom_list = [f'chr{i}' for i in range(1,23)] + ['chrX','chrY'] # ,'chrM']
+            for chrom in chrom_list:
+                
+                gt_chrom = gt.replace('{chrom}',chrom)
+                ref_chrom = ref.replace('{chrom}',chrom)          # 없는 경우도 허용(단독 refine 용도)
+                gmap_chrom = gmap.replace('{chrom}',chrom)
 
-        return [run_line, idx_line]
+                impute_vcf_chrom = impute_vcf.replace('{chrom}',chrom)
+
+                argv: List[str] = [
+                    java_bin, f"-Xmx{xmx_gb}g",
+                    "-jar", beagle_jar,
+                    f"gt={gt_chrom}",
+                    f"out={impute_vcf_chrom}",
+                    f"nthreads={nthreads}",
+                    f"impute={'true' if impute else 'false'}",
+                    f"gp={'true' if gp else 'false'}",
+                ]
+                if ref:   argv += [f"ref={ref_chrom}"]
+                if gmap:  argv += [f"map={gmap_chrom}"]
+                if ne is not None:   argv += [f"ne={ne}"]
+                if err is not None:  argv += [f"err={err}"]
+                if seed is not None: argv += [f"seed={seed}"]
+                cmd = " ".join(map(safe_quote, argv))
+                total_cmd.append(cmd)
+
+        return ['\n'.join(total_cmd)]
+
 
     def to_sh(self) -> List[str]:
         p = {**self.DEFAULTS, **(self.params or {})}

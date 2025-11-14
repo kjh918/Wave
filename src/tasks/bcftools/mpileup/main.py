@@ -95,7 +95,7 @@ class BwaMemTask(Task):
                     '-Q', min_base_qual,
                     '-r', chrom,
                     '--threads',threads,
-                    '-Oz', f'{bam}','|',
+                    '-Ou', f'{bam}','|',
                     bcftools, 'call',
                     '--ploidy-file', ploidy_file,
                     '-mv','-Oz','-o', f'{out_vcf}/{sample_id}'
