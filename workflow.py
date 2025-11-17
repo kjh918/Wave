@@ -16,6 +16,19 @@ from src.tasks.task_registry import TaskRegistry
 # --------------------------
 # 유틸: 태스크 오토로더 (전역 함수)
 # --------------------------
+
+def _skip_finished_tasks(output_dict, done_flag):
+    output_count = 0
+    status = 0
+    for output in output_dict.values():
+        output_count += 1
+        if os.path.isfile(output):
+            if os.path.getsize(output) >0:
+                status+= 1
+    if output_count == status:
+        with open(done_flag, 'w'):
+            pass     
+
 def _autoload_tasks(package_root: str = "src.tasks") -> None:
     """
     src.tasks 하위 모든 서브모듈을 import해서
@@ -335,6 +348,15 @@ class Workflow:
                         'workdir': str(tdir),
                         'cmd': task_cmd[0]
                     }
+
+                    workdir = Path(_task["workdir"])
+                    workdir.mkdir(parents=True, exist_ok=True)
+
+                    # .done 있으면 스킵(출력검증은 executor/flags에서 수행하는 게 베스트)
+                    done_flag = workdir / ".done"
+
+                    _skip_finished_tasks(_task.get("outputs", {}), done_flag)
+                    
                     sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
                     script_path = sample_executor._make_script(task_cmd[0], task.name)
                 json.dump(total_task_dict, handle, indent=4)
@@ -364,6 +386,7 @@ class Workflow:
 
                 # .done 있으면 스킵(출력검증은 executor/flags에서 수행하는 게 베스트)
                 done_flag = workdir / ".done"
+
                 if done_flag.exists():
                     print(f"[WAVE] Skip {sid}:{task_name} (done flag found)")
                     continue
@@ -376,7 +399,7 @@ class Workflow:
                     workdir=meta['workdir'],
                     outputs=meta['outputs']
                     )
-
+                
                 qid = executor.qsub_sh(
                     node=meta["node"],
                     script_path=str(script_path),

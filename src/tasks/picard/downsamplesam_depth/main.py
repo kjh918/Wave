@@ -82,7 +82,8 @@ class PicardDownsampleByDepthTask(Task):
                  f'echo "[info] Baseline mean depth: $BASE_DEPTH x"']
 
         # 2) target depth 계산
-        target_list = [0.1, 0.2, 0.5, 1, 1.5, 2]
+        target_list = [0.5, 1, 2, 3, 4, 5, 10]
+
         for target in target_list:
             if target_mode == "fraction":
                 cmds += [f'TARGET_DEPTH=$(python3 - <<PY\nprint(round(float("{target}")/float("$BASE_DEPTH"),4))\nPY\n)\n']

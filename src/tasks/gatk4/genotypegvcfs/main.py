@@ -57,6 +57,7 @@ class GatkHaplotypeCallerTask(Task):
         out_vcf = outputs.get("vcf") or os.path.join(out_dir, f"{sample_id}.vcf.gz")
 
         total_cmd_list = []
+        all_sites = str(params.get('all_sites', 'false')).lower()
 
         if params['region'] == 'chrom':
             
@@ -67,13 +68,13 @@ class GatkHaplotypeCallerTask(Task):
                 _chrom_output_gvcf = out_vcf.replace('{chrom}',chrom)
                 cmd = [
                     str(params.get("gatk_bin", "gatk")),
-                    f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 4)}",
-                    f"-Xmx{params.get('xmx_gb', 16)}g",
+                    "--java-options",f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 4)} -Xmx{params.get('xmx_gb', 16)}g",
                     "GenotypeGVCFs",
-                    f'-R {ref} ',
-                    f'-L {chrom} ',
-                    f'-V {_chrom_input_gvcf} ',
-                    f'-O {_chrom_output_gvcf} ',
+                    f'-R',f'{ref}',
+                    f'-L',f'{chrom}',
+                    f'-V',f'{_chrom_input_gvcf}',
+                    f'-O', f'{_chrom_output_gvcf}',
+                    f'--include-non-variant-sites',f'{all_sites}'
                 ]
 
                 image = params.get("image")
@@ -84,10 +85,10 @@ class GatkHaplotypeCallerTask(Task):
                         binds=normalize_binds(params.get("binds")),
                         singularity_bin=params.get("singularity_bin", "singularity"),
                     )
+                    cmd_line = " ".join(map(shlex.quote, cmd_line))
                 else:
                     cmd_line = " ".join(map(shlex.quote, cmd))
-                total_cmd_list.append(" ".join(cmd_line))
-
+                total_cmd_list.append(cmd_line)
             return ["\n".join(total_cmd_list)]
         else:
             cmd = [
@@ -95,9 +96,11 @@ class GatkHaplotypeCallerTask(Task):
                     f"-XX:ParallelGCThreads={params.get('parallel_gc_threads', 4)}",
                     f"-Xmx{params.get('xmx_gb', 16)}g",
                     "GenotypeGVCFs",
-                    f'-R {ref} ',
-                    f'-V {gvcf} ',
-                    f'-O {vcf} ',
+                    f'-R',f'{ref}',
+                    f'-L',f'{chrom}',
+                    f'-V',f'{_chrom_input_gvcf}',
+                    f'-O', f'{_chrom_output_gvcf}',
+                    f'--include-non-variant-sites',f'{all_sites}'
                 ]
             image = params.get("image")
             if image:
