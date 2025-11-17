@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 from executor import SunGridExecutor
 from task import Task
 from task_registry import TaskRegistry
-from src.wave.utils.workflow_utils import (
+from wave.utils.workflow_utils import (
     autoload_tasks,
     skip_finished_tasks, 
     parse_placeholders,
@@ -308,9 +308,9 @@ class Workflow:
 
         # 2) 모듈 임포트 시도
         if func:
-            module_path = f"src.wave.tasks.{tool}.{func}.main"
+            module_path = f"wave.tasks.{tool}.{func}.main"
         else:
-            module_path = f"src.wave.tasks.{tool}.main"
+            module_path = f"wave.tasks.{tool}.main"
 
         print(module_path)  # 디버깅용
         try:
