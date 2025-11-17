@@ -8,9 +8,11 @@ from typing import Dict, Any, List, Optional
 import pyaml 
 from pathlib import Path 
 
-sys.path.append('/Users/kimjihoon/Downloads/GdriveBackup/Projects/Wave')
-from workflow import Workflow 
-from src.executor import SunGridExecutor 
+ROOT = Path(__file__).resolve().parents[1]    # Wave/
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+from wave.core.workflow import Workflow 
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -27,17 +29,13 @@ def main():
 
     wf = Workflow(args.config)
 
-    sge = SunGridExecutor   (
-        logdir=str(Path(wf.work_dir))
-    )
-    
     # 3️⃣ 샘플 자동 탐색
     samples = wf.discover_samples()
     print(f"\n[WAVE] Found {len(samples)} samples:")
 
     workflow_dict = wf.build()
 
-    wf.run()
+    # wf.run()
 
     
 

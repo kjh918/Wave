@@ -6,9 +6,20 @@ SETTING:
   version: v0.0.1
   description: ''
 
+  max_samples: 10      # 한 번에 최대 10 샘플까지만 제출
+  max_threads: 16   
+
+
 WORK_PARAMETERS:
+
   input_path: /Users/kimjihoon/Downloads/GdriveBackup/Projects/Bioinformatics/wgs-wave-pipeline/Resources/data/{sample_id}_{read}.fastq.gz
   work_dir_path: /Users/kimjihoon/Downloads/GdriveBackup/Projects/Bioinformatics/wgs-wave-pipeline/Results
+  reference_genome: /storage/references_and_index/hg38/fasta/cbNIPT/hg38.fa
+  known_snp: /storage/references_and_index/hg38/vcf/Homo_sapiens_assembly38.dbsnp138.vcf.gz
+  known_indel1: /storage/references_and_index/hg38/vcf/Homo_sapiens_assembly38.known_indels.vcf.gz
+  known_indel2: /storage/references_and_index/hg38/vcf/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+  gnomead_snp:  /storage/references_and_index/hg38/vcf/Homo_sapiens_assembly38.dbsnp138.vcf.gz
+
   
 TASK_LIST:
   - Rawdata_FastQC:
@@ -77,30 +88,58 @@ TASK_LIST:
         platform: "{ReadGroupPlatform}"
         library_name: "{ReadGroupLibrary}"
         sequencing_center: "{ReadGroupCenter}"
-        tmp_dir: "{TmpDir}"
+        tmp_dir: "{WORK_DIR}/TmpDir"
         java_bin: "java"
         jar: "/storage/apps/bin/picard.jar"
         xmx_gb: 16
         parallel_gc_THREADS: 14
 
+  - Align_SAM_Bwa:
+      TOOL: picard
+      FUNC: fastqtosam
+      WORK_DIR: "{work_dir_path}/{sample_id}/04_Align_SAM_Bwa"
+      THREADS: 14                  # (옵션) 인터페이스 상 존재, 실제 picard 호출엔 java 옵션으로 반영
+      INPUT:
+        read1: "{work_dir_path}/{sample_id}/01_Trimdata_FastP/{sample_id}_R1.trimed.fastq.gz"
+        read2: "{work_dir_path}/{sample_id}/01_Trimdata_FastP/{sample_id}_R2.trimed.fastq.gz"
+      OUTPUT:
+        bam: "{WORK_DIR}/{sample_id}.bwa.mem.sam"
+      PARAMS:
+        reference_genome: "{reference_genome}"
+        read_length: 50
+        read_group_id: "GENCURIX"
+        center: "GENCURIX"
+        platform: "ILLUMINA"
+        library_name: "WGS"
+        sample_id: '{sample_id}'
+        images: "/storage/images/bwa-0.7.17.sif"
+        binds: "/storage,/data"
+
   - Picard_MergeBamAlignment:
       TOOL: picard
       FUNC: mergebamalignment
-      WORK_DIR: "{work_dir_path}/{sample_id}/03_Merge"
+      THREADS: 14
+      WORK_DIR: "{work_dir_path}/{sample_id}/05_MergeBam_Picard"
       INPUT:
-        unmapped_bam: "{work_dir_path}/{sample_id}/02_FastqToSam/{sample_id}.fastqtosam.bam"
-        aligned_bam:  "{work_dir_path}/{sample_id}/02_Bwa/{sample_id}.bwa.mem.sam"
-        reference:    "/ref/hg38.fa"
+        unmapped_bam: "{work_dir_path}/{sample_id}/03_Unalign_FastqToSam_Picard/{sample_id}.fastqtosam.bam"
+        aligned_bam:  "{work_dir_path}/{sample_id}/04_Align_SAM_Bwa/{sample_id}.bwa.mem.sam"
+        reference:    "{reference_genome}"
       OUTPUT:
         bam: "{WORK_DIR}/{sample_id}.primary.bam"
+      PARAMS:
+        xmx_gb: 16
+        parallel_gc_threads: 14
+        primary_strategy: MostDistant
+        create_index: True
+
 
   - Samtools_Sort:
       TOOL: samtools
       FUNC: sort
       THREADS: 4
-      WORK_DIR: "{work_dir_path}/{sample_id}/04_Sort"
+      WORK_DIR: "{work_dir_path}/{sample_id}/05_MergeBam_Picard"
       INPUT:
-        bam_in: "{work_dir_path}/{sample_id}/03_Merge/{sample_id}.primary.bam"
+        bam_in: "{work_dir_path}/{sample_id}/05_MergeBam_Picard/{sample_id}.primary.bam"
       OUTPUT:
         bam: "{WORK_DIR}/{sample_id}.sorted.bam"
       PARAMS:
@@ -110,9 +149,9 @@ TASK_LIST:
       TOOL: samtools
       FUNC: index
       THREADS: 4
-      WORK_DIR: "{work_dir_path}/{sample_id}/05_Index"
+      WORK_DIR: "{work_dir_path}/{sample_id}/05_MergeBam_Picard"
       INPUT:
-        bam: "{work_dir_path}/{sample_id}/04_Sort/{sample_id}.sorted.bam"
+        bam: "{work_dir_path}/{sample_id}/05_MergeBam_Picard/{sample_id}.sorted.bam"
       OUTPUT:
         index: "{WORK_DIR}/{sample_id}.sorted.bam.bai"
       PARAMS:
@@ -121,10 +160,10 @@ TASK_LIST:
   - MarkDuplicates:
       TOOL: gatk4
       FUNC: markduplicates
-      WORK_DIR: "{work_dir_path}/{sample_id}/04_MarkDuplicates"
+      WORK_DIR: "{work_dir_path}/{sample_id}/06_MarkDuplicates_GATK"
       THREADS: 14
       INPUT:
-        bam: "{work_dir_path}/{sample_id}/04_Sort/{sample_id}.sorted.bam"
+        bam: "{work_dir_path}/{sample_id}/05_MergeBam_Picard/{sample_id}.sorted.bam"
       OUTPUT:
         dir: "{WORK_DIR}"
         bam: "{WORK_DIR}/{sample_id}.sorted.dedup.bam"
@@ -135,83 +174,149 @@ TASK_LIST:
         xmx_gb: 16
         parallel_gc_THREADS: 14
         image: "/storage/images/gatk-4.4.0.0.sif"
-        binds: ["/storage", "/data"]
+        binds: "/storage,/data"
 
-  # 2) RealignerTargetCreator (GATK3)
   - RealignerTargetCreator:
       TOOL: gatk3
       FUNC: realignertargetcreator
-      WORK_DIR: "{work_dir_path}/{sample_id}/05_Realign"
+      WORK_DIR: "{work_dir_path}/{sample_id}/07_Realign_GATK"
       THREADS: 8
       INPUT:
-        bam: "{work_dir_path}/{sample_id}/04_MarkDuplicates/{sample_id}.sorted.dedup.bam"
-        reference: "/storage/ref/hg38.fa"
-        known_indel1: "/storage/ref/known_indels1.vcf.gz"
-        known_indel2: "/storage/ref/known_indels2.vcf.gz"
+        bam: "{work_dir_path}/{sample_id}/06_MarkDuplicates_GATK/{sample_id}.sorted.dedup.bam"
       OUTPUT:
         dir: "{WORK_DIR}"
         intervals: "{WORK_DIR}/{sample_id}.realign.target.intervals"
       PARAMS:
+        reference: "{reference_genome}"
+        known_indel1: "{known_indel1}"
+        known_indel2: "{known_indel2}"
+        image: "/storage/images/gatk-3.8-1.sif"
+        binds: "/storage,/data"
         xmx_gb: 16
         nt: 8
-        image: "/storage/images/gatk-3.8-1.sif"
-        binds: ["/storage", "/data"]
 
-  # 3) IndelRealigner (GATK3)
   - IndelRealigner:
       TOOL: gatk3
       FUNC: indelrealigner
-      WORK_DIR: "{work_dir_path}/{sample_id}/05_Realign"
+      WORK_DIR: "{work_dir_path}/{sample_id}/07_Realign_GATK"
       THREADS: 1
       INPUT:
-        bam: "{work_dir_path}/{sample_id}/04_MarkDuplicates/{sample_id}.sorted.dedup.bam"
-        reference: "/storage/ref/hg38.fa"
-        intervals: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.realign.target.intervals"
-        known_indel1: "/storage/ref/known_indels1.vcf.gz"
-        known_indel2: "/storage/ref/known_indels2.vcf.gz"
+        bam: "{work_dir_path}/{sample_id}/06_MarkDuplicates_GATK/{sample_id}.sorted.dedup.bam"
+        intervals: "{work_dir_path}/{sample_id}/07_Realign_GATK/{sample_id}.realign.target.intervals"
       OUTPUT:
         dir: "{WORK_DIR}"
         bam: "{WORK_DIR}/{sample_id}.sorted.dedup.realign.bam"
       PARAMS:
-        xmx_gb: 16
+        known_indel1: "{known_indel1}"
+        known_indel2: "{known_indel2}"
+        reference: "{reference_genome}"
         image: "/storage/images/gatk-3.8-1.sif"
-        binds: ["/storage", "/data"]
+        binds: "/storage,/data"
+        xmx_gb: 16
 
-  # 4) BaseRecalibrator (GATK4)
-  # - BaseRecalibrator:
-  #     TOOL: gatk4
-  #     FUNC: baserecalibrator
-  #     WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
-  #     THREADS: 14
-  #     INPUT:
-  #       bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
-  #       reference: "/storage/ref/hg38.fa"
-  #     OUTPUT:
-  #       dir: "{WORK_DIR}"
-  #       table: "{WORK_DIR}/{sample_id}.recal.table.txt"
-  #     PARAMS:
-  #       known_site1: "/storage/ref/known_snps.vcf.gz"
-  #       known_site2: "/storage/ref/known_indels1.vcf.gz"
-  #       known_site3: "/storage/ref/known_indels2.vcf.gz"
-  #       xmx_gb: 16
-  #       parallel_gc_THREADS: 14
-  #       image: "/storage/images/gatk-4.4.0.0.sif"
-  #       binds: ["/storage", "/data"]
+  - BaseRecalibrator:
+      TOOL: gatk4
+      FUNC: baserecalibrator
+      WORK_DIR: "{work_dir_path}/{sample_id}/08_BQSR_GATK"
+      THREADS: 14
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/07_Realign_GATK/{sample_id}.sorted.dedup.realign.bam"
+      OUTPUT:
+        table: "{WORK_DIR}/{sample_id}.recal.table.txt"
+      PARAMS:
+        reference: "{reference_genome}"
+        known_snp: "{known_snp}"
+        known_indel1: "{known_indel1}"
+        known_indel2: "{known_indel2}"
+        xmx_gb: 16
+        parallel_gc_THREADS: 14
+        image: "/storage/images/gatk-4.4.0.0.sif"
+        binds: "/storage,/data"
 
   # # 5) ApplyBQSR (GATK4)
-  # - ApplyBQSR:
-  #     TOOL: gatk4
-  #     FUNC: applybqsr
-  #     WORK_DIR: "{work_dir_path}/{sample_id}/06_BQSR"
-  #     THREADS: 14
-  #     INPUT:
-  #       bam: "{work_dir_path}/{sample_id}/05_Realign/{sample_id}.sorted.dedup.realign.bam"
-  #       bqsr_table: "{work_dir_path}/{sample_id}/06_BQSR/{sample_id}.recal.table.txt"
-  #     OUTPUT:
-  #       dir: "{WORK_DIR}"
-  #       bam: "{WORK_DIR}/{sample_id}.recal.bam"
-  #     PARAMS:
-  #       xmx_gb: 16
-  #       parallel_gc_THREADS: 14
-  #       image: "/storage/images/gatk-4.4.0.0.sif"
-  #       binds: ["/storage", "/data"]
+  - ApplyBQSR:
+      TOOL: gatk4
+      FUNC: applybqsr
+      WORK_DIR: "{work_dir_path}/{sample_id}/08_BQSR_GATK"
+      THREADS: 14
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/07_Realign_GATK/{sample_id}.sorted.dedup.realign.bam"
+        bqsr_table: "{work_dir_path}/{sample_id}/08_BQSR_GATK/{sample_id}.recal.table.txt"
+      OUTPUT:
+        bam: "{WORK_DIR}/{sample_id}.recal.bam"
+      PARAMS:
+        xmx_gb: 16
+        parallel_gc_THREADS: 14
+        image: "/storage/images/gatk-4.4.0.0.sif"
+        binds: "/storage,/data"
+
+
+  - CollectGcBiasMetrics:
+      TOOL: gatk4
+      FUNC: collectgcbiasmetrics
+      WORK_DIR: "{work_dir_path}/{sample_id}/09_BAM_QC"
+      THREADS: 14
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/08_BQSR_GATK/{sample_id}.recal.bam"
+        reference: "{reference_genome}"
+      OUTPUT:
+        metrics: "{WORK_DIR}/{sample_id}.gcbias.metrics.txt"
+        pdf: "{WORK_DIR}/{sample_id}.gcbias.pdf"
+        summary: "{WORK_DIR}/{sample_id}.gcbias.summary.txt"
+      PARAMS:
+        xmx_gb: 16
+        parallel_gc_THREADS: 8
+        image: "/storage/images/gatk-4.4.0.0.sif"
+        binds: "/storage,/data"
+        validation_stringency: LENIENT
+        assume_sorted: True
+        IS_BISULFITE_SEQUENCED: False
+
+  - Depth_Samtools:
+      TOOL: samtools
+      FUNC: depth
+      THREADS: 4
+      WORK_DIR: "{work_dir_path}/{sample_id}/09_BAM_QC"
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/08_BQSR_GATK/{sample_id}.recal.bam"
+      OUTPUT:
+        depth: "{WORK_DIR}/{sample_id}.depth.txt"
+      PARAMS:
+        all_position: True
+
+
+
+  - HaplotypeCaller:
+      TOOL: gatk4
+      FUNC: haplotypecaller
+      WORK_DIR: "{work_dir_path}/{sample_id}/09_HaplotypeCaller_GATK"
+      THREADS: 2
+      INPUT:
+        bam: "{work_dir_path}/{sample_id}/08_BQSR_GATK/{sample_id}.recal.bam"
+        reference: "{reference_genome}"
+        known_snp: "{known_snp}"
+      OUTPUT:
+        gvcf: "{WORK_DIR}/{sample_id}.{chrom}.gvcf.gz"
+      PARAMS:
+        xmx_gb: 16
+        parallel_gc_THREADS: 2
+        image: "/storage/images/gatk-4.4.0.0.sif"
+        binds: "/storage,/data"
+        region: chrom
+
+  - GenotypeGvcfs:
+      TOOL: gatk4
+      FUNC: genotypegvcfs
+      WORK_DIR: "{work_dir_path}/{sample_id}/10_GenotypeGVCFS_GATK"
+      THREADS: 2
+      INPUT:
+        gvcf: "{work_dir_path}/{sample_id}/09_HaplotypeCaller_GATK/{sample_id}.{chrom}.gvcf.gz"
+        reference: "{reference_genome}"
+      OUTPUT:
+        vcf: "{WORK_DIR}/{sample_id}.{chrom}.vcf.gz"
+      PARAMS:
+        xmx_gb: 16
+        parallel_gc_THREADS: 2
+        image: "/storage/images/gatk-4.4.0.0.sif"
+        binds: "/storage,/data"
+        region: chrom
