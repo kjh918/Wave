@@ -4,9 +4,9 @@ from typing import Dict, Any, List, Optional, Sequence
 from pathlib import Path
 import os
 
-from src.wave.core.task import Task
-from src.wave.core.task_registry import register_task
-from src.wave.utils.task_utils import (   # ← utils 로 고정
+from wave.core.task import Task
+from wave.core.task_registry import register_task
+from wave.utils.task_utils import (   # ← utils 로 고정
     ensure_dir,
     normalize_binds,
     singularity_exec_cmd,
@@ -24,7 +24,7 @@ def _prefix_from_read1(r1: str) -> str:
             return name[:-len(ext)]
     return os.path.splitext(name)[0]
 
-# @TaskRegistry.register('fastp')
+    
 @register_task('fastp')
 class FastpTask(Task):
     TYPE = "fastp"

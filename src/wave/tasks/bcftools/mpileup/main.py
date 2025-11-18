@@ -4,9 +4,9 @@ from pathlib import Path
 import os, shlex
 from glob import glob
 
-from src.wave.core.task import Task
-from src.wave.core.task_registry import register_task
-from src.wave.utils.task_utils import (
+from wave.core.task import Task
+from wave.core.task_registry import register_task
+from wave.utils.task_utils import (
     ensure_dir,
     normalize_binds,
     singularity_exec_cmd,

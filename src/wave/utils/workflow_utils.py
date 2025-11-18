@@ -4,30 +4,70 @@ import re, shlex, importlib, pkgutil
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from src.wave.core.task_registry import TaskRegistry
-from src.wave.core.task import Task
+from wave.core.task_registry import TaskRegistry
+from wave.core.task import Task
 
 
 # --------------------------
 # task auto-load
 # --------------------------
-def autoload_tasks(package_root: str = "src.wave.tasks") -> None:
+def autoload_tasks(package_root: str = "wave.tasks") -> None:
     """
-    src.tasks 하위 모든 서브모듈을 import해서
-    @TaskRegistry.register 가 실행되도록 만든다.
+    wave.tasks 하위에서 *.main 모듈을 자동으로 import.
+    각 main.py 안에서 @register_task(...) 가 실행되면서
+    TaskRegistry 에 등록된다.
     """
-    pkg = importlib.import_module(package_root)
+    try:
+        pkg = importlib.import_module(package_root)
+    except ModuleNotFoundError as e:
+        print(f"[WAVE] cannot import package_root='{package_root}': {e}")
+        return
+
+    print(f"[WAVE] autoload from {package_root}, path={pkg.__path__}")
+
     for m in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
-        # _ 로 시작하는 내부 모듈은 스킵
-        if any(part.startswith("_") for part in m.name.split(".")):
+        # m.name 예시:
+        #   wave.tasks.fastqc
+        #   wave.tasks.fastp
+        #   wave.tasks.gatk4
+        #   wave.tasks.gatk4.haplotypecaller
+        #   wave.tasks.gatk4.haplotypecaller.main
+        name = m.name
+        print("  - found:", name, "ispkg=", m.ispkg)
+
+        # 1) main.py만 골라서 import
+        if name.endswith(".main"):
+            try:
+                print("    import:", name)
+                importlib.import_module(name)
+            except Exception as e:
+                print(f"[WAVE] autoload skip {name}: {e}")
             continue
-        try:
 
-            print(m)
-            importlib.import_module(m.name)
-        except Exception as e:
-            print(f"[WAVE] task autoload skip {m.name}: {e}")
+        # 2) 패키지인 경우, 그 아래의 main들을 위해 패키지만 먼저 로딩
+        if m.ispkg:
+            try:
+                importlib.import_module(name)
+            except Exception as e:
+                print(f"[WAVE] autoload skip pkg {name}: {e}")
+                continue
 
+    print(f"[WAVE] registered tasks: {list(TaskRegistry._REG.keys())}")
+# def autoload_tasks(package_root: str = "src.tasks") -> None:
+#     """
+#     src.tasks 하위 모든 서브모듈을 import해서
+#     @TaskRegistry.register 가 실행되도록 만든다.
+#     """
+#     pkg = importlib.import_module(package_root)
+#     for m in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
+#         print(m)
+#         # _ 로 시작하는 내부 모듈은 스킵
+#         if any(part.startswith("_") for part in m.name.split(".")):
+#             continue
+#         try:
+#             importlib.import_module(m.name)
+#         except Exception as e:
+#             print(f"[WAVE] task autoload skip {m.name}: {e}")
 
 # --------------------------
 # 완료된 태스크 스킵용 헬퍼

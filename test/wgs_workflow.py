@@ -8,9 +8,16 @@ from typing import Dict, Any, List, Optional
 import pyaml 
 from pathlib import Path 
 
-sys.path.append('/storage/home/jhkim/scripts/Wave')
-from workflow import Workflow 
-from src.executor import SunGridExecutor 
+sys.path.append('/storage/home/jhkim/scripts/Task/Wave')
+
+ROOT = Path(__file__).resolve().parents[1]   # .../Wave
+SRC  = ROOT / "src"
+sys.path.insert(0, str(SRC))
+
+# sys.path.append(os.path.dirname(__file__))
+
+from wave.core.workflow import Workflow
+from wave.core.executor import SunGridExecutor
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -37,7 +44,7 @@ def main():
 
     workflow_dict = wf.build()
 
-    wf.run()
+    # wf.run()
 
     
 

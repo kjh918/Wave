@@ -7,10 +7,6 @@ from typing import Dict, Any, List, Optional, Iterable
 
 # 베이스 Task & 레지스트리
 sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-
 
 from executor import SunGridExecutor
 from task import Task

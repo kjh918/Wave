@@ -13,16 +13,16 @@ def fix_main_imports(main_file: Path):
     # --- 기존 패턴들 제거/대체
     replacements = {
         # Task
-        "from src.tasks.task import Task": 
-        "from src.wave.core.task import Task",
+        "from src.wave.core.task import Task": 
+        "from wave.core.task import Task",
 
         # TaskRegistry
-        "from src.tasks.task_registry import register_task":
-        "from src.wave.core.task_registry import register_task",
+        "from src.wave.core.task_registry import register_task":
+        "from wave.core.task_registry import register_task",
 
         # Utils
-        "from src.tasks.utils import":
-        "from src.wave.utils.task_utils import",
+        "from src.wave.utils.task_utils import":
+        "from wave.utils.task_utils import",
     }
 
     new_text = text
@@ -40,10 +40,14 @@ def fix_main_imports(main_file: Path):
 def scan_and_fix(root: Path):
     """재귀적으로 tasks 하위의 모든 main.py 탐색"""
     for path in root.rglob("main.py"):
+        
+        with open(f'{os.path.dirname(path)}/__init__.py','w') as handle:
+            pass
+
         fix_main_imports(path)
 
 
 if __name__ == "__main__":
     print(f"🔍 Scanning for main.py in {ROOT}")
-    scan_and_fix(Path('/Users/kimjihoon/Downloads/GdriveBackup/Projects/Wave/src/wave/tasks'))
+    scan_and_fix(Path('/storage/home/jhkim/scripts/Task/Wave/src/wave/tasks'))
     print("\n✨ Import fix completed.")
