@@ -23,7 +23,6 @@ class TaskRegistry:
 
     @classmethod
     def get(cls, key: str) -> Type["Task"]:
-        print(key)
         try:
             return cls._REG[key]
         except KeyError:

@@ -9,8 +9,8 @@ from typing import Dict, Any, List, Optional, Iterable
 sys.path.append(os.path.dirname(__file__))
 
 from executor import SunGridExecutor
-from task import Task
-from task_registry import TaskRegistry
+from wave.core.task import Task
+from wave.core.task_registry import TaskRegistry
 from wave.utils.workflow_utils import (
     autoload_tasks,
     skip_finished_tasks, 
@@ -295,7 +295,7 @@ class Workflow:
     # --------------------------
     def _resolve_task_class(self, tool: str, func: Optional[str] = None):
         key = tool if not func else f"{tool}.{func}"  # fastqc / gatk4.baserecalibrator
-
+        
         # 1) 먼저 레지스트리 조회
         try:
             return TaskRegistry.get(key)
@@ -308,7 +308,6 @@ class Workflow:
         else:
             module_path = f"wave.tasks.{tool}.main"
 
-        print(module_path)  # 디버깅용
         try:
             import importlib
             importlib.import_module(module_path)

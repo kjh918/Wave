@@ -43,11 +43,14 @@ def scan_and_fix(root: Path):
         
         with open(f'{os.path.dirname(path)}/__init__.py','w') as handle:
             pass
+        with open(f'{os.path.dirname(os.path.dirname(path))}/__init__.py','w') as handle:
+            pass
 
         fix_main_imports(path)
 
 
 if __name__ == "__main__":
     print(f"🔍 Scanning for main.py in {ROOT}")
-    scan_and_fix(Path('/storage/home/jhkim/scripts/Task/Wave/src/wave/tasks'))
+    # scan_and_fix(Path('/storage/home/jhkim/scripts/Task/Wave/src/wave/tasks'))
+    scan_and_fix(Path('/Users/kimjihoon/Downloads/GdriveBackup/Projects/Wave/src/wave/tasks'))
     print("\n✨ Import fix completed.")

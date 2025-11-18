@@ -1,7 +1,7 @@
 import os, sys, subprocess, string, random, time
 from pathlib import Path
 from multiprocessing import Pool, get_context
-from src.wave.utils.flags import skip_if_done, flag_on_complete
+from wave.utils.flags import skip_if_done, flag_on_complete
 
 
 def run_local_shell(*, cmd: str, task, cwd=None) -> bool:
