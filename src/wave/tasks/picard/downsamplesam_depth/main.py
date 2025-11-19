@@ -4,7 +4,9 @@ import os, shlex
 
 from wave.core.task import Task
 from wave.core.task_registry import register_task
-from wave.utils.task_utils import ensure_dir, to_sh_from_builder, singularity_exec_cmd, normalize_binds
+from wave.utils.task_utils import (
+    ensure_dir, to_sh_from_builder, singularity_exec_cmd, normalize_binds
+)
 
 @register_task("picard.downsamplesam_depth")
 class PicardDownsampleByDepthTask(Task):

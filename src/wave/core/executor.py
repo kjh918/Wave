@@ -146,6 +146,85 @@ class SunGridExecutor:
 # class SunGridExecutor(Executor):
 #     """SGE (qsub) 기반 실행기"""
 
+# class SunGridExecutor:
+#     def __init__(
+#         self,
+#         logdir: Path,
+#         max_jobs: Optional[int] = None,        # 동시에 돌아갈 수 있는 최대 job 수
+#         max_threads: Optional[int] = None,     # 동시에 쓰일 수 있는 전체 slots (thread) 수
+#         user: Optional[str] = None,
+#         poll_interval: int = 30,               # 초 단위
+#     ):
+#         self.logdir = Path(logdir)
+#         self.logdir.mkdir(parents=True, exist_ok=True)
+
+#         self.max_jobs = max_jobs or 0          # 0 → 제한 없음
+#         self.max_threads = max_threads or 0
+#         self.user = user or os.environ.get("USER", "")
+#         self.poll_interval = poll_interval
+
+#     # --- 이미 있던 메서드들 (예: make_script, qsub_sh 등)은 그대로 두고 아래만 추가 ---
+
+#     def _current_usage(self) -> tuple[int, int]:
+#         """
+#         현재 사용자 기준으로 SGE qstat 결과에서
+#         - jobs: r, qw 상태 job 개수
+#         - slots: 그 job들이 사용하는 총 슬롯 수(열 9, SGE 기본 형식 기준)
+#         """
+#         try:
+#             out = subprocess.check_output(
+#                 ["qstat", "-u", self.user],
+#                 text=True,
+#                 stderr=subprocess.DEVNULL,
+#             )
+#         except Exception:
+#             # qstat 실패하면 사용량을 0으로 간주 (환경에 맞게 조정 가능)
+#             return 0, 0
+
+#         jobs = 0
+#         slots = 0
+#         lines = out.splitlines()
+#         # 보통 1~2줄 헤더가 있으니 2줄은 스킵
+#         for line in lines[2:]:
+#             parts = line.split()
+#             if len(parts) < 9:
+#                 continue
+#             state = parts[4]     # r, qw, Eqw ...
+#             if state not in ("r", "qw"):
+#                 continue
+#             jobs += 1
+#             try:
+#                 slots += int(parts[8])
+#             except ValueError:
+#                 pass
+#         return jobs, slots
+
+#     def wait_for_slot(self, need_threads: int = 1) -> None:
+#         """
+#         qsub 하기 전에 호출.
+#         - max_jobs / max_threads 제한을 넘지 않을 때까지 기다린 뒤 리턴.
+#         - need_threads: 새 job이 사용할 thread 수 (slots).
+#         """
+#         while True:
+#             jobs, slots = self._current_usage()
+
+#             # job 개수 제한 체크
+#             if self.max_jobs and jobs >= self.max_jobs:
+#                 print(f"[SGE] jobs={jobs} >= MaxJobs={self.max_jobs} → wait {self.poll_interval}s")
+#                 time.sleep(self.poll_interval)
+#                 continue
+
+#             # 전체 slots 제한 체크
+#             if self.max_threads and (slots + need_threads) > self.max_threads:
+#                 print(
+#                     f"[SGE] slots({slots}) + need({need_threads}) > "
+#                     f"MaxThreads={self.max_threads} → wait {self.poll_interval}s"
+#                 )
+#                 time.sleep(self.poll_interval)
+#                 continue
+
+#             # 제한 안 넘으면 탈출 → qsub 가능
+#             break
 class SunGridExecutor(Executor):
     def __init__(
             self,

@@ -44,27 +44,34 @@ def autoload_tasks(package_root: str = "wave.tasks") -> None:
                 print(f"[WAVE] autoload skip pkg {name}: {e}")
                 continue
 
+
 def skip_finished_tasks(output_dict: Dict[str, Any], done_flag: Path) -> bool:
     """
-    outputs 딕셔너리 안의 파일들이 전부 존재 & size>0 이면
-    done_flag(<workdir>/.done)를 생성하고 True 반환.
-    아니면 False.
+    output_dict 에서 'dir' key는 제외하고,
+    나머지 outputs 의 모든 파일이 존재 & size>0 이면
+    done_flag(.done)를 생성하고 True를 반환.
+    그렇지 않으면 False.
     """
     outputs = output_dict or {}
-    output_count = 0
+
+    # dir 제외
+    file_outputs = {
+        k: v for k, v in outputs.items()
+        if k != "dir" and v and isinstance(v, str)
+    }
+
+    output_count = len(file_outputs)
     ok_count = 0
 
-    for v in outputs.values():
-        if not v:
-            continue
+    for v in file_outputs.values():
         p = Path(v)
-        output_count += 1
         if p.is_file() and p.stat().st_size > 0:
             ok_count += 1
 
-    if output_count > 0 and output_count == ok_count:
+    if output_count > 0 and ok_count == output_count:
         done_flag.write_text("OK\n")
         return True
+
     return False
 
 

@@ -85,3 +85,67 @@ def to_sh_from_builder(
         sample_id=sample_id,
     )
     return join_argv_lines(lines)
+
+def task_help_text(task_cls) -> str:
+    """
+    Task class의 INPUTS / OUTPUTS / DEFAULTS / TYPE을 기반으로
+    자동 help text를 생성해주는 함수.
+    """
+    lines = []
+    lines.append(f"# {task_cls.__name__}")
+    lines.append(f"**TYPE:** `{task_cls.TYPE}`\n")
+
+    # Inputs
+    lines.append("## Inputs")
+    if hasattr(task_cls, "INPUTS") and task_cls.INPUTS:
+        for key, spec in task_cls.INPUTS.items():
+            req = "required" if spec.get("required") else "optional"
+            desc = spec.get("desc", "")
+            typ = spec.get("type", "")
+            lines.append(f"- `{key}` ({typ}, {req}): {desc}")
+    else:
+        lines.append("_This task does not define INPUTS._")
+
+    # Outputs
+    lines.append("\n## Outputs")
+    if hasattr(task_cls, "OUTPUTS") and task_cls.OUTPUTS:
+        for key, spec in task_cls.OUTPUTS.items():
+            req = "required" if spec.get("required") else "optional"
+            desc = spec.get("desc", "")
+            typ = spec.get("type", "")
+            lines.append(f"- `{key}` ({typ}, {req}): {desc}")
+    else:
+        lines.append("_This task does not define OUTPUTS._")
+
+    # Parameters / defaults
+    lines.append("\n## Parameters (Defaults)")
+    if hasattr(task_cls, "DEFAULTS") and task_cls.DEFAULTS:
+        for key, val in task_cls.DEFAULTS.items():
+            lines.append(f"- `{key}` = `{val}`")
+    else:
+        lines.append("_No default parameters defined._")
+
+    # describe how to call
+    lines.append("\n## Usage Example")
+    lines.append("```python")
+    lines.append(f"from wave.tasks import {task_cls.__name__}")
+    lines.append("")
+    lines.append(f"task = {task_cls.__name__}(")
+    lines.append("    name='sample_task',")
+    lines.append("    tool='toolname',")
+    lines.append("    func='funcname',")
+    lines.append("    threads=4,")
+    lines.append("    workdir='/path/to/work',")
+    lines.append("    inputs={...},")
+    lines.append("    outputs={...},")
+    lines.append("    params={...},")
+    lines.append(")")
+    lines.append("cmd = task.to_sh()")
+    lines.append("```")
+
+    return "\n".join(lines)
+
+
+def print_task_help(task_cls):
+    """터미널에서 바로 help 출력"""
+    print(task_help_text(task_cls))
