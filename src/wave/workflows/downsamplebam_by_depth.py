@@ -3,15 +3,16 @@ from __future__ import annotations
 from typing import List
 from pathlib import Path
 import argparse
+import os, sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 # Wave 패키지 내부 import (구조에 맞게 조정)
-from wave.executor import SunGridExecutor
+from wave.core.executor import SunGridExecutor
 from wave.utils.task_utils import ensure_dir
 
 # atomic task 들 (이미 만들어둔 Task들 가정)
-from wave.tasks.samtools.depth.main import SamtoolsDepthTask
-from wave.tasks.picard.downsamplesam.main import PicardDownsampleSamTask
-
+from wave.tasks.picard.downsamplesam.main import PicardDownSampleSamTask
+from wave.tasks.mosdepth.main import MosdepthMeanDepthTask
 
 # -----------------------------
 # argparse

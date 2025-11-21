@@ -179,163 +179,163 @@ class Workflow:
     # 스크립트 빌드 (샘플 × 태스크) → task.sh / master.sh
     # --------------------------
 
-    def build(self, mode: str = "json") -> Dict[str, Any]:
-        """
-        mode:
-          - 'json' : JSON 메타만 생성 (qsub은 외부 스크립트에서)
-          - 'sh'   : task별 .sh 스크립트만 생성
-          - 'both' : JSON + .sh 둘 다 생성
-        """
-        assert mode in {"json", "sh", "both"}, f"Unsupported build mode: {mode}"
+    # def build(self, mode: str = "json") -> Dict[str, Any]:
+    #     """
+    #     mode:
+    #       - 'json' : JSON 메타만 생성 (qsub은 외부 스크립트에서)
+    #       - 'sh'   : task별 .sh 스크립트만 생성
+    #       - 'both' : JSON + .sh 둘 다 생성
+    #     """
+    #     assert mode in {"json", "sh", "both"}, f"Unsupported build mode: {mode}"
 
-        samples = self.discover_samples()
-        self.workflow["SAMPLES"] = samples
-
-        if not samples:
-            return {"samples": {}, "masters": {}}
-
-        masters: Dict[str, Path] = {}
-
-        for sid, _ in samples.items():
-            # 1) TASK_LIST 정규화
-            tasks_norm = self._normalize_tasklist_legacy(
-                self.cfg.get("TASK_LIST", {}), sample_id=sid
-            )
-
-            # 2) 샘플 루트 디렉토리
-            sid_root = self.work_dir / sid
-            sid_root.mkdir(parents=True, exist_ok=True)
-
-            # 3) 샘플별 master JSON
-            master_json = sid_root / f"workflow_{sid}.json"
-            total_task_dict: Dict[str, Any] = {}
-
-            with master_json.open("w") as handle:
-                for _task in tasks_norm:
-                    tdir: Path = _task["workdir"]
-                    tdir.mkdir(parents=True, exist_ok=True)
-
-                    # 3-1) Task 클래스 resolve + 인스턴스 생성
-                    TaskCls = self._resolve_task_class(
-                        tool=_task["tool"], func=_task["func"]
-                    )
-                    task = instantiate_task(
-                        TaskCls,
-                        name=_task["name"],
-                        tool=_task["tool"],
-                        func=_task["func"],
-                        threads=_task["threads"],
-                        workdir=tdir,
-                        inputs=_task.get("inputs", {}),
-                        outputs=_task.get("outputs", {}),
-                        params=_task.get("params", {}),
-                    )
-
-                    # 3-2) 쉘 커맨드 문자열 생성
-                    task_cmd_lines = list(self._to_shell_lines(task.to_sh()))
-                    # 보통 한 줄짜리지만, 여러 줄일 수도 있으니 join
-                    cmd_str = "\n".join(task_cmd_lines)
-
-                    # 3-3) 플래그 체크 (이미 출력이 다 있으면 .done / .failed 생성)
-                    status = mark_task_status(_task.get("outputs", {}), tdir)
-
-                    # 3-4) 스크립트 생성 (mode가 sh 또는 both 인 경우)
-                    script_path = None
-                    if mode in {"sh", "both"}:
-                        executor = SunGridExecutor(logdir=tdir / "log")
-                        script_path = executor._make_script(
-                            cmd=cmd_str,
-                            job_id=task.name,
-                        )
-
-                    # 3-5) JSON용 메타데이터 정리
-                    total_task_dict[task.name] = {
-                        "user": self.workflow["SETTING"].get("User"),
-                        "node": self.workflow["SETTING"].get("Node"),
-                        "job_id": task.name,
-                        "threads": int(task.threads),
-                        "inputs": _task.get("inputs", {}),
-                        "outputs": _task.get("outputs", {}),
-                        "workdir": str(tdir),
-                        "cmd": cmd_str,
-                        "status": status,  # done / failed / pending
-                        "script": str(script_path) if script_path else None,
-                    }
-
-                # 샘플별 task map JSON 저장
-                json.dump(total_task_dict, handle, indent=4)
-
-            masters[sid] = master_json
-
-        return {"samples": samples, "masters": masters}
-    # def build(self) -> Dict[str, Any]:
     #     samples = self.discover_samples()
     #     self.workflow["SAMPLES"] = samples
 
     #     if not samples:
     #         return {"samples": {}, "masters": {}}
-    #     count = 0 
-    #     masters: Dict[str, Path] = {}
-    #     for sid, _ in samples.items():
-    #         # 1) 레거시 TASK_LIST 정규화
-            
-    #         tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", {}), sample_id=sid)
 
-    #         # 샘플 작업 루트
+    #     masters: Dict[str, Path] = {}
+
+    #     for sid, _ in samples.items():
+    #         # 1) TASK_LIST 정규화
+    #         tasks_norm = self._normalize_tasklist_legacy(
+    #             self.cfg.get("TASK_LIST", {}), sample_id=sid
+    #         )
+
+    #         # 2) 샘플 루트 디렉토리
     #         sid_root = self.work_dir / sid
     #         sid_root.mkdir(parents=True, exist_ok=True)
 
-    #         # 마스터 스크립트
+    #         # 3) 샘플별 master JSON
     #         master_json = sid_root / f"workflow_{sid}.json"
-    #         total_task_dict = {}
-    #         with open(master_json, 'w') as handle:
-            
-    #             qids: list[str] = []
-    #             prev_qid: Optional[str] = None
+    #         total_task_dict: Dict[str, Any] = {}
 
+    #         with master_json.open("w") as handle:
     #             for _task in tasks_norm:
-    #                 tdir = _task['workdir']
+    #                 tdir: Path = _task["workdir"]
     #                 tdir.mkdir(parents=True, exist_ok=True)
-    #                 TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
 
+    #                 # 3-1) Task 클래스 resolve + 인스턴스 생성
+    #                 TaskCls = self._resolve_task_class(
+    #                     tool=_task["tool"], func=_task["func"]
+    #                 )
     #                 task = instantiate_task(
     #                     TaskCls,
-    #                     name = _task["name"],
-    #                     tool = _task["tool"],
-    #                     func = _task["func"],
-    #                     threads = _task["threads"],
-    #                     workdir = tdir,
-    #                     inputs = _task.get("inputs", {}),
-    #                     outputs = _task.get("outputs", {}),
-    #                     params = _task.get("params", {}),
+    #                     name=_task["name"],
+    #                     tool=_task["tool"],
+    #                     func=_task["func"],
+    #                     threads=_task["threads"],
+    #                     workdir=tdir,
+    #                     inputs=_task.get("inputs", {}),
+    #                     outputs=_task.get("outputs", {}),
+    #                     params=_task.get("params", {}),
     #                 )
 
-    #                 task_cmd = list(self._to_shell_lines(task.to_sh()))
+    #                 # 3-2) 쉘 커맨드 문자열 생성
+    #                 task_cmd_lines = list(self._to_shell_lines(task.to_sh()))
+    #                 # 보통 한 줄짜리지만, 여러 줄일 수도 있으니 join
+    #                 cmd_str = "\n".join(task_cmd_lines)
+
+    #                 # 3-3) 플래그 체크 (이미 출력이 다 있으면 .done / .failed 생성)
+    #                 status = mark_task_status(_task.get("outputs", {}), tdir)
+
+    #                 # 3-4) 스크립트 생성 (mode가 sh 또는 both 인 경우)
+    #                 script_path = None
+    #                 if mode in {"sh", "both"}:
+    #                     executor = SunGridExecutor(logdir=tdir / "log")
+    #                     script_path = executor._make_script(
+    #                         cmd=cmd_str,
+    #                         job_id=task.name,
+    #                     )
+
+    #                 # 3-5) JSON용 메타데이터 정리
     #                 total_task_dict[task.name] = {
-    #                     'user': self.workflow['SETTING']['User'],
-    #                     'node': self.workflow['SETTING']['Node'],
-    #                     'job_id': task.name,
-    #                     'threads': task.threads,
-    #                     'inputs' : _task.get("inputs", {}),
-    #                     'outputs' : _task.get("outputs", {}),
-    #                     'workdir': str(tdir),
-    #                     'cmd': task_cmd[0]
+    #                     "user": self.workflow["SETTING"].get("User"),
+    #                     "node": self.workflow["SETTING"].get("Node"),
+    #                     "job_id": task.name,
+    #                     "threads": int(task.threads),
+    #                     "inputs": _task.get("inputs", {}),
+    #                     "outputs": _task.get("outputs", {}),
+    #                     "workdir": str(tdir),
+    #                     "cmd": cmd_str,
+    #                     "status": status,  # done / failed / pending
+    #                     "script": str(script_path) if script_path else None,
     #                 }
 
-    #                 workdir = Path(_task["workdir"])
-    #                 workdir.mkdir(parents=True, exist_ok=True)
-
-    #                 # .done 있으면 스킵(출력검증은 executor/flags에서 수행하는 게 베스트)
-    #                 done_flag = workdir / ".done"
-
-    #                 skip_finished_tasks(_task.get("outputs", {}), done_flag)
-                    
-    #                 sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
-    #                 script_path = sample_executor._make_script(task_cmd[0], task.name)
+    #             # 샘플별 task map JSON 저장
     #             json.dump(total_task_dict, handle, indent=4)
+
     #         masters[sid] = master_json
 
-        # return {"samples": samples, "masters": masters}
+    #     return {"samples": samples, "masters": masters}
+    def build(self) -> Dict[str, Any]:
+        samples = self.discover_samples()
+        self.workflow["SAMPLES"] = samples
+
+        if not samples:
+            return {"samples": {}, "masters": {}}
+        count = 0 
+        masters: Dict[str, Path] = {}
+        for sid, _ in samples.items():
+            # 1) 레거시 TASK_LIST 정규화
+            
+            tasks_norm = self._normalize_tasklist_legacy(self.cfg.get("TASK_LIST", {}), sample_id=sid)
+
+            # 샘플 작업 루트
+            sid_root = self.work_dir / sid
+            sid_root.mkdir(parents=True, exist_ok=True)
+
+            # 마스터 스크립트
+            master_json = sid_root / f"workflow_{sid}.json"
+            total_task_dict = {}
+            with open(master_json, 'w') as handle:
+            
+                qids: list[str] = []
+                prev_qid: Optional[str] = None
+
+                for _task in tasks_norm:
+                    tdir = _task['workdir']
+                    tdir.mkdir(parents=True, exist_ok=True)
+                    TaskCls = self._resolve_task_class(tool=_task["tool"], func=_task["func"])
+
+                    task = instantiate_task(
+                        TaskCls,
+                        name = _task["name"],
+                        tool = _task["tool"],
+                        func = _task["func"],
+                        threads = _task["threads"],
+                        workdir = tdir,
+                        inputs = _task.get("inputs", {}),
+                        outputs = _task.get("outputs", {}),
+                        params = _task.get("params", {}),
+                    )
+
+                    task_cmd = list(self._to_shell_lines(task.to_sh()))
+                    total_task_dict[task.name] = {
+                        'user': self.workflow['SETTING']['User'],
+                        'node': self.workflow['SETTING']['Node'],
+                        'job_id': task.name,
+                        'threads': task.threads,
+                        'inputs' : _task.get("inputs", {}),
+                        'outputs' : _task.get("outputs", {}),
+                        'workdir': str(tdir),
+                        'cmd': task_cmd[0]
+                    }
+
+                    workdir = Path(_task["workdir"])
+                    workdir.mkdir(parents=True, exist_ok=True)
+
+                    # .done 있으면 스킵(출력검증은 executor/flags에서 수행하는 게 베스트)
+                    done_flag = workdir / ".done"
+
+                    skip_finished_tasks(_task.get("outputs", {}), done_flag)
+                    
+                    sample_executor = SunGridExecutor(logdir=Path(tdir) / 'log')
+                    # script_path = sample_executor._make_script(task_cmd[0], task.name)
+                json.dump(total_task_dict, handle, indent=4)
+            masters[sid] = master_json
+
+        return {"samples": samples, "masters": masters}
 
     # --------------------------
     # 실행

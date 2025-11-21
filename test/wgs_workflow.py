@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 import pyaml 
 from pathlib import Path 
 
-sys.path.append('/storage/home/jhkim/scripts/Task/Wave')
+# sys.path.append('/storage/home/jhkim/scripts/Task/Wave')
 
 ROOT = Path(__file__).resolve().parents[1]   # .../Wave
 SRC  = ROOT / "src"
@@ -17,7 +17,6 @@ sys.path.insert(0, str(SRC))
 # sys.path.append(os.path.dirname(__file__))
 
 from wave.core.workflow import Workflow
-from wave.core.executor import SunGridExecutor
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -33,10 +32,6 @@ def main():
     args = parser.parse_args()
 
     wf = Workflow(args.config)
-
-    sge = SunGridExecutor   (
-        logdir=str(Path(wf.work_dir))
-    )
     
     # 3️⃣ 샘플 자동 탐색
     samples = wf.discover_samples()
