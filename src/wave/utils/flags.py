@@ -133,6 +133,7 @@ def flag_on_complete(flag_name: str = ".done", fail_flag: str = ".failed", write
                                 indent=2, ensure_ascii=False
                             )
                         )
+            print(result)
             return result
         return wrapper
     return deco

@@ -39,7 +39,11 @@ def main():
 
     workflow_dict = wf.build()
 
-    # wf.run()
+
+    # wf.run(executor='bash')
+
+    wf.run()
+
 
     
 
