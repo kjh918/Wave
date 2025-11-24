@@ -1,7 +1,7 @@
 import os, sys, subprocess, string, random, time
 from pathlib import Path
 from multiprocessing import Pool, get_context
-from wave.utils.flags import skip_if_done, flag_on_complete
+from wave.utils.flags import auto_flag_on_complete
 
 
 def run_local_shell(*, cmd: str, task, cwd=None) -> bool:
@@ -26,35 +26,33 @@ class Executor:
         script_path.chmod(0o755)
         return script_path
 
-    # def make_script(self, *, cmd: str, job_id: str, workdir: Path, outputs: list[str]) -> Path:
-    #     # (기존 그대로) .done/.failed 생성까지 포함
-    #     script_path = self.session_dir / f"{job_id}.sh"
-    #     script_path.write_text(f"""#!/usr/bin/env bash
-    #     set -euo pipefail
-    #     {cmd}
-    #     """)
-    #     script_path.chmod(0o755)
-    #     return script_path
-
 # ---------------------------------------------------------------------
 # ✅ 1. BashExecutor — 로컬에서 직접 실행
 # ---------------------------------------------------------------------
 class BashExecutor(Executor):
     """로컬 bash 실행용 executor"""
 
+    @auto_flag_on_complete(outputs_arg="outputs", workdir_arg="workdir")
+    def run(self, cmd: str, job_id: str | None = None, *, task=None, workdir: str | Path = None, outputs: dict | None = None) -> int:
+        """
+        - task: optional Task 객체 (task.workdir, task.outputs 사용)
+        - workdir/outputs: explicit fallback (if task is None)
+        """
+        # prefer task
+        if task is not None:
+            self.current_task = task  # so decorators can pick it up if needed
+            workdir = getattr(task, "workdir", workdir)
+            outputs = getattr(task, "outputs", outputs)
 
-    @skip_if_done(flag_name=".done", require_outputs_ok=True)  # 실행 전 스킵
-    @flag_on_complete(flag_name=".done", fail_flag=".failed")  # 실행 후 플래그
-    def run(self, cmd: str, job_id: str | None = None) -> int:
         job_id = job_id or "".join(random.choice(string.ascii_letters) for _ in range(10))
-        script_path = self.make_script(cmd, job_id)
+        script_path = self.make_script(cmd, job_id)  # make_script should accept optional workdir
         stdout_path = self.logdir / f"{job_id}.stdout"
         stderr_path = self.logdir / f"{job_id}.stderr"
-
         with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
             process = subprocess.Popen(["bash", str(script_path)], stdout=out, stderr=err)
             ret = process.wait()
-
+            print(ret)
+        print(script_path)
         if ret != 0:
             raise RuntimeError(f"BashExecutor: job {job_id} failed with code {ret}")
         return ret
@@ -115,8 +113,8 @@ class SunGridExecutor(Executor):
         except Exception:
             pass
 
-    @skip_if_done(flag_name=".done", require_outputs_ok=True)  # 실행 전 스킵
-    @flag_on_complete(flag_name=".done", fail_flag=".failed")  # 실행 후 플래그
+
+    @auto_flag_on_complete(outputs_arg="outputs", workdir_arg="workdir")
     def qsub_sh(self, *, node: str, script_path: str, threads: int, job_id: str,
                 memory_gb: int | None = None,
                 hold_jid: str | list[str] | None = None,   # ⬅️ 추가

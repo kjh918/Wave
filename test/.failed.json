@@ -1,0 +1,7 @@
+{
+  "status": "FAILED",
+  "timestamp": "2025-11-24 21:01:35",
+  "exception": "RuntimeError('BashExecutor: job TEST)_Rawdata_FastQC failed with code 126')",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/kimjihoon/Downloads/GdriveBackup/Projects/Wave/src/wave/utils/flags.py\", line 157, in wrapper\n    res = func(*args, **kwargs)\n  File \"/Users/kimjihoon/Downloads/GdriveBackup/Projects/Wave/src/wave/core/executor.py\", line 58, in run\n    raise RuntimeError(f\"BashExecutor: job {job_id} failed with code {ret}\")\nRuntimeError: BashExecutor: job TEST)_Rawdata_FastQC failed with code 126\n",
+  "missing_or_empty": []
+}
