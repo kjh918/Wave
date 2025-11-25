@@ -1,3 +1,4 @@
+
 # flexible_workflow.py
 from __future__ import annotations
 import os
@@ -29,6 +30,7 @@ from wave.utils.workflow_utils import (
     sh_join,
     instantiate_task,
 )
+from wave.utils.log import Logger
 
 
 @dataclass
@@ -62,9 +64,15 @@ class Workflow:
             "SAMPLES": {},
         }
 
-        # autoload tasks from package 'wave.tasks'
+        self.max_threads_total = int(self.cfg["SETTING"]['MAX_THREADS_TOTAL'])
+        self.max_samples= int(self.cfg["SETTING"]['MAX_SAMPLES'])
+        
         autoload_tasks("wave.tasks")
 
+        self.workflow_logdir = Path(self.w_params["work_dir_path"]) / 'log'
+        # Logger(self.workflow_logdir)
+
+    ## util parer 에서 fastq 파일 parsing하도록 ## 
     # --------------------------
     # sample discovery (template)
     # --------------------------
@@ -116,6 +124,7 @@ class Workflow:
             setted_inputs[key] = value
         return setted_inputs
 
+    ## 코드 정리 필요 ## 
     def _normalize_tasklist_legacy(self, task_list_raw: Any, sample_id: str) -> List[Dict[str, Any]]:
         if not isinstance(task_list_raw, list):
             raise TypeError("TASK_LIST must be a list for legacy form.")
@@ -217,11 +226,7 @@ class Workflow:
                     'workdir': str(tdir),
                     'cmd': cmd_str,
                 }
-
-                # check done flag and create if already satisfied
-                done_flag = tdir / ".done"
-                skip_finished_tasks(_task.get("outputs", {}), done_flag)
-
+                
             # write master json
             master_json.write_text(json.dumps(total_task_dict, indent=4))
             masters[sid] = master_json
@@ -270,10 +275,8 @@ class Workflow:
 
                 if executor.upper() == 'SGE':
                     _executor = SunGridExecutor(logdir=workdir / "log")
-
                     script_path = _executor.make_script(cmd=meta["cmd"], job_id=meta["job_id"])
                     print(f"[WAVE] created script: {script_path}")
-
                     qid = _executor.qsub_sh(
                         node=meta.get("node"),
                         script_path=str(script_path),
@@ -284,9 +287,6 @@ class Workflow:
                     )
                     print(f"[WAVE] qsub {sid}:{task_name} -> {qid}")
                     prev_qid = qid
-
-                    # update throttle counters (best-effort)
-                    running_jobs += 1
                     used_threads += int(meta.get("threads", 1))
 
                 else:
@@ -302,11 +302,12 @@ class Workflow:
                         outputs = meta.get("outputs", {})
                     )
                     print(f"[WAVE] local run finished {sid}:{task_name}")
+                    used_threads += int(meta.get("threads", 1))
 
-            # end per-sample loop
 
         return plan
 
+    ## 코드정리필요 ## 
     # --------------------------
     # helper: resolve task class
     # --------------------------

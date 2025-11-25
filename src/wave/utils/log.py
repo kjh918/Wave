@@ -1,76 +1,70 @@
-import datetime
-import json
-import traceback
+import time
+import sys
+from pathlib import Path
 from functools import wraps
+from contextlib import contextmanager
+from io import StringIO
+
 
 class Logger:
-    def __init__(self, func=None, *, task_id=None):
-        self.func = func
-        self.task_id = task_id
-        self.logs = []
-        if func is not None:
-            wraps(func)(self)
+    def __init__(self, run_id: str = None, logdir: Path = Path("./logs")):
+        self.run_id = run_id or time.strftime("%Y%m%d_%H%M%S")
+        self.logdir = Path(logdir)
+        self.session_dir = self.logdir
+        self.session_dir.mkdir(parents=True, exist_ok=True)
 
-    def __call__(self, *args, **kwargs):
-        # 표기: task_id가 있으면 붙이고, 없으면 생략
-        task_info = f" ▶ {self.task_id}" if self.task_id is not None else ""
+        self.log_file = self.session_dir / f"log.{self.run_id}.txt"
 
-        start_ts = self.timestamp()
-        start_time = datetime.datetime.now()
+    # -----------------------------
+    #  기본 파일 기록 메서드
+    # -----------------------------
+    def write(self, text: str):
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(text + "\n")
 
-        print(f"[{start_ts}]{task_info} ▶ {self.func.__name__} START")
-        try:
-            result = self.func(*args, **kwargs)
-            end_time = datetime.datetime.now()
-            end_ts = end_time.strftime("%Y-%m-%d %H:%M:%S")
-            duration = (end_time - start_time).total_seconds()
-            print(f"[{end_ts}]{task_info} ▶ {self.func.__name__} END (Process Time : {duration:.4f}s)")
-            self.save_log(start_ts, end_ts, duration, args, kwargs, result=result)
+    # -----------------------------
+    #  함수 데코레이터 방식
+    # -----------------------------
+    def log_function(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            self.write(f"[START] {func.__name__} at {time.strftime('%H:%M:%S')}")
+
+            # 함수 내부 print 캡처
+            old_stdout = sys.stdout
+            sys.stdout = captured = StringIO()
+
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                # 캡처된 출력 복원 + 기록
+                sys.stdout = old_stdout
+                out = captured.getvalue()
+                if out.strip():
+                    self.write(f"[PRINT OUTPUT]\n{out.strip()}")
+
+            self.write(f"[END] {func.__name__} at {time.strftime('%H:%M:%S')}")
+            self.write("-" * 50)
             return result
-        except Exception as e:
-            error_time = datetime.datetime.now()
-            error_ts = error_time.strftime("%Y-%m-%d %H:%M:%S")
-            duration = (error_time - start_time).total_seconds()
+        return wrapper
 
-            print(f"[{error_ts}]{task_info} ▶ {self.func.__name__} ERROR (Process Time : {duration:.4f}s Log : {e})")
+    # -----------------------------
+    #  Context Manager 방식
+    # -----------------------------
+    @contextmanager
+    def log_block(self, name="block"):
+        self.write(f"[START BLOCK] {name} - {time.strftime('%H:%M:%S')}")
 
-            tb = traceback.format_exc()
-            self.save_log(start_ts, error_ts, duration, args, kwargs, error=str(e), traceback=tb)
-            raise  # 에러 재전파 (workflow/executor에서 처리)
+        old_stdout = sys.stdout
+        sys.stdout = captured = StringIO()
 
-    def timestamp(self) -> str:
-        """현재 시각을 'YYYY-MM-DD HH:MM:SS' 형식 문자열로 반환"""
-        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+            out = captured.getvalue()
+            if out.strip():
+                self.write(f"[BLOCK OUTPUT]\n{out.strip()}")
 
-    def save_log(self, start_ts, end_ts, duration, args, kwargs, result=None, error=None, traceback=None):
-        entry = {
-            "task_id": self.task_id,
-            "function": self.func.__name__ if self.func else None,
-            "start_time": start_ts,
-            "end_time": end_ts,
-            "duration_sec": duration,
-            "args": args,
-            "kwargs": kwargs,
-            "result": result,
-            "error": error,
-            "traceback": traceback,
-        }
-        self.logs.append(entry)
-
-    def get_logs(self):
-        return self.logs
-
-    def save_logs_to_file(self, path: str, mode: str = "a"):
-        with open(path, mode, encoding="utf-8") as f:
-            for rec in self.logs:
-                f.write(json.dumps(rec, ensure_ascii=False) + "")
-
-# 기본 로거
-def logger(func):
-    return Logger(func)
-
-# task_id 버전 로거
-def logger_with_task(task_id: str):
-    def decorator(func):
-        return Logger(func, task_id=task_id)
-    return decorator
+            self.write(f"[END BLOCK] {name} - {time.strftime('%H:%M:%S')}")
+            self.write("-" * 50)

@@ -40,9 +40,9 @@ def main():
     workflow_dict = wf.build()
 
 
-    # wf.run(executor='bash')
+    wf.run(executor='bash',max_threads_total=1)
 
-    wf.run()
+    # wf.run()
 
 
     
