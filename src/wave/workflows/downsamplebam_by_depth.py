@@ -6,6 +6,8 @@ import argparse
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+print(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+exit()
 # Wave 패키지 내부 import (구조에 맞게 조정)
 from wave.core.executor import SunGridExecutor
 from wave.utils.task_utils import ensure_dir
